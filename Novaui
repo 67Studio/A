@@ -1649,26 +1649,25 @@ function lib:MakeWindow(cfg)
 			end
 			value = snap(value)
 
-			-- CAMBIO AQUI: Aumentado de 184 a 224 para que la barra sea más corta
-			local row2, labels = build("row", page, name, desc, 224, true)
+			local row2, labels = build("row", page, name, desc, 140, true)
 			row2.LayoutOrder = nextOrder()
 
 			local right = mk("Frame", {
 				BackgroundTransparency = 1,
-				Size = UDim2.new(0, 200, 1, 0), -- Aumentado de 170 a 200
+				Size = UDim2.new(0, 130, 1, 0),
 				AnchorPoint = Vector2.new(1, 0),
 				Position = UDim2.new(1, 0, 0, 0),
 				Parent = row2,
 			})
 			local hit = mk("TextButton", {
 				BackgroundTransparency = 1,
-				Size = UDim2.new(1, -52, 1, 0),
+				Size = UDim2.new(1, -40, 1, 0),
 				Parent = right,
 			})
 			local track = tag(mk("Frame", {
-				Size = UDim2.new(1, -8, 0, 6),
+				Size = UDim2.new(1, 0, 0, 6),
 				AnchorPoint = Vector2.new(0, 0.5),
-				Position = UDim2.new(0, 4, 0.5, 0),
+				Position = UDim2.new(0, 0, 0.5, 0),
 				Parent = hit,
 			}), "Stroke")
 			build("round", track, 3)
@@ -1687,9 +1686,9 @@ function lib:MakeWindow(cfg)
 				Font = Enum.Font.GothamBold,
 				TextSize = 11,
 				TextXAlignment = Enum.TextXAlignment.Right,
-				Size = UDim2.new(0, 36, 1, 0),
+				Size = UDim2.new(0, 30, 1, 0),
 				AnchorPoint = Vector2.new(1, 0),
-				Position = UDim2.new(1, -10, 0, 0),
+				Position = UDim2.new(1, -5, 0, 0),
 			}, "Accent")
 			local popScale = mk("UIScale", { Parent = valueLabel })
 			local popId = 0
