@@ -1,0 +1,2172 @@
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+local Workspace = game:GetService("Workspace")
+local CoreGui = game:GetService("CoreGui")
+
+local GUI_NAME = "NovaUI"
+local SAVE_FILE = "novaui.json"
+local HEADER_H = 29
+local MIN_W, MAX_W = 430, 1000
+local MIN_H, MAX_H = 200, 500
+local MIN_TAB, MAX_TAB = 135, 250
+local DEFAULT_INFO = TweenInfo.new(0.18, Enum.EasingStyle.Quint)
+
+local function rgb(r, g, b)
+	return Color3.fromRGB(r, g, b)
+end
+
+local function sweep(a, b, c)
+	return ColorSequence.new({
+		ColorSequenceKeypoint.new(0, a),
+		ColorSequenceKeypoint.new(0.5, b),
+		ColorSequenceKeypoint.new(1, c or a),
+	})
+end
+
+local function newSignal(name)
+	local handlers = {}
+	local sig = { Name = name }
+
+	local function add(fn, once)
+		if type(fn) ~= "function" then return nil end
+		local handle = { Connected = true, fn = fn, once = once }
+		function handle:Disconnect()
+			if not self.Connected then return end
+			self.Connected = false
+			local idx = table.find(handlers, self)
+			if idx then table.remove(handlers, idx) end
+		end
+		table.insert(handlers, handle)
+		return handle
+	end
+
+	function sig:Connect(fn)
+		return add(fn, false)
+	end
+
+	function sig:Once(fn)
+		return add(fn, true)
+	end
+
+	function sig:_fire(...)
+		for _, handle in ipairs(table.clone(handlers)) do
+			if handle.once then handle:Disconnect() end
+			task.spawn(handle.fn, ...)
+		end
+	end
+
+	return sig
+end
+
+local signals = {}
+local Bus = {}
+for _, name in ipairs({ "FlagsChanged", "ThemeChanged", "FileSaved", "OptionAdded" }) do
+	signals[name] = newSignal(name)
+	Bus[name] = signals[name]
+end
+
+function Bus:FireConnection(name, ...)
+	local sig = signals[type(name) == "table" and name.Name or name]
+	if sig then sig:_fire(...) end
+end
+
+local lib = {
+	Info = { Version = "2.0.0" },
+	Themes = {
+		Darker = {
+			gradient = sweep(rgb(25, 25, 25), rgb(32, 32, 32)),
+			panel = rgb(30, 30, 30),
+			elevated = rgb(40, 40, 40),
+			stroke = rgb(52, 52, 52),
+			accent = rgb(88, 101, 242),
+			text = rgb(243, 243, 243),
+			muted = rgb(180, 180, 180),
+			success = rgb(67, 181, 129),
+			danger = rgb(237, 66, 69),
+		},
+		Dark = {
+			gradient = sweep(rgb(40, 40, 40), rgb(48, 48, 48)),
+			panel = rgb(45, 45, 45),
+			elevated = rgb(56, 56, 56),
+			stroke = rgb(70, 70, 70),
+			accent = rgb(65, 150, 255),
+			text = rgb(245, 245, 245),
+			muted = rgb(190, 190, 190),
+			success = rgb(67, 181, 129),
+			danger = rgb(237, 66, 69),
+		},
+		Purple = {
+			gradient = sweep(rgb(27, 25, 30), rgb(33, 31, 38)),
+			panel = rgb(32, 29, 38),
+			elevated = rgb(43, 38, 52),
+			stroke = rgb(58, 50, 70),
+			accent = rgb(150, 0, 255),
+			text = rgb(240, 240, 240),
+			muted = rgb(180, 175, 190),
+			success = rgb(67, 181, 129),
+			danger = rgb(237, 66, 69),
+		},
+		Abyss = {
+			gradient = sweep(rgb(8, 10, 16), rgb(11, 14, 22), rgb(14, 18, 28)),
+			panel = rgb(14, 18, 28),
+			elevated = rgb(22, 28, 42),
+			stroke = rgb(30, 50, 80),
+			accent = rgb(0, 170, 255),
+			text = rgb(220, 235, 255),
+			muted = rgb(130, 150, 180),
+			success = rgb(0, 200, 140),
+			danger = rgb(220, 60, 80),
+		},
+	},
+	Save = { UISize = { 550, 380 }, TabSize = 160, Theme = "Darker" },
+	Settings = { ScriptFile = false },
+	Flags = {},
+	Options = {},
+	Tabs = {},
+	Connection = Bus,
+	Instances = {},
+	Elements = {},
+	_virtualHeight = 450,
+	Icons = {
+		activity = "rbxassetid://10709752035",
+		alertcircle = "rbxassetid://10709752996",
+		alerttriangle = "rbxassetid://10709753149",
+		anchor = "rbxassetid://10709761530",
+		archive = "rbxassetid://10709762233",
+		arrowdown = "rbxassetid://10709767827",
+		arrowleft = "rbxassetid://10709768114",
+		arrowright = "rbxassetid://10709768347",
+		arrowup = "rbxassetid://10709768939",
+		award = "rbxassetid://10709769406",
+		backpack = "rbxassetid://10709769841",
+		battery = "rbxassetid://10709774640",
+		bell = "rbxassetid://10709775704",
+		bluetooth = "rbxassetid://10709776655",
+		book = "rbxassetid://10709781824",
+		bookmark = "rbxassetid://10709782154",
+		bot = "rbxassetid://10709782230",
+		box = "rbxassetid://10709782497",
+		briefcase = "rbxassetid://10709782662",
+		brush = "rbxassetid://10709782758",
+		bug = "rbxassetid://10709782845",
+		building = "rbxassetid://10709783051",
+		calculator = "rbxassetid://10709783311",
+		calendar = "rbxassetid://10709789505",
+		camera = "rbxassetid://10709789686",
+		car = "rbxassetid://10709789810",
+		check = "rbxassetid://10709790644",
+		checkcircle = "rbxassetid://10709790387",
+		chevrondown = "rbxassetid://10709790948",
+		chevronleft = "rbxassetid://10709791281",
+		chevronright = "rbxassetid://10709791437",
+		chevronup = "rbxassetid://10709791523",
+		circle = "rbxassetid://10709798174",
+		clipboard = "rbxassetid://10709799288",
+		clock = "rbxassetid://10709805144",
+		cloud = "rbxassetid://10709806740",
+		code = "rbxassetid://10709810463",
+		coffee = "rbxassetid://10709810814",
+		cog = "rbxassetid://10709810948",
+		coins = "rbxassetid://10709811110",
+		compass = "rbxassetid://10709811445",
+		copy = "rbxassetid://10709812159",
+		cpu = "rbxassetid://10709813383",
+		crosshair = "rbxassetid://10709818534",
+		crown = "rbxassetid://10709818626",
+		database = "rbxassetid://10709818996",
+		diamond = "rbxassetid://10709819149",
+		download = "rbxassetid://10723344270",
+		droplet = "rbxassetid://10723344432",
+		edit = "rbxassetid://10734883598",
+		eye = "rbxassetid://10723346959",
+		eyeoff = "rbxassetid://10723346871",
+		file = "rbxassetid://10723374641",
+		filetext = "rbxassetid://10723367380",
+		filter = "rbxassetid://10723375128",
+		flag = "rbxassetid://10723375890",
+		flame = "rbxassetid://10723376114",
+		folder = "rbxassetid://10723387563",
+		gamepad = "rbxassetid://10723395457",
+		gem = "rbxassetid://10723396000",
+		ghost = "rbxassetid://10723396107",
+		gift = "rbxassetid://10723396402",
+		globe = "rbxassetid://10723404337",
+		hammer = "rbxassetid://10723405360",
+		hand = "rbxassetid://10723405649",
+		harddrive = "rbxassetid://10723405749",
+		hash = "rbxassetid://10723405975",
+		headphones = "rbxassetid://10723406165",
+		heart = "rbxassetid://10723406885",
+		helpcircle = "rbxassetid://10723406988",
+		home = "rbxassetid://10723407389",
+		image = "rbxassetid://10723415040",
+		info = "rbxassetid://10723415903",
+		joystick = "rbxassetid://10723416527",
+		key = "rbxassetid://10723416652",
+		keyboard = "rbxassetid://10723416765",
+		layers = "rbxassetid://10723424505",
+		layoutdashboard = "rbxassetid://10723424646",
+		lightbulb = "rbxassetid://10723425852",
+		link = "rbxassetid://10723426722",
+		list = "rbxassetid://10723433811",
+		loader = "rbxassetid://10723434070",
+		lock = "rbxassetid://10723434711",
+		logout = "rbxassetid://10723434906",
+		mail = "rbxassetid://10734885430",
+		map = "rbxassetid://10734886202",
+		mappin = "rbxassetid://10734886004",
+		maximize = "rbxassetid://10734886735",
+		menu = "rbxassetid://10734887784",
+		messagecircle = "rbxassetid://10734888000",
+		mic = "rbxassetid://10734888864",
+		minimize = "rbxassetid://10734895698",
+		minus = "rbxassetid://10734896206",
+		monitor = "rbxassetid://10734896881",
+		moon = "rbxassetid://10734897102",
+		mouse = "rbxassetid://10734898592",
+		move = "rbxassetid://10734900011",
+		music = "rbxassetid://10734905958",
+		package = "rbxassetid://10734909540",
+		palette = "rbxassetid://10734910430",
+		pause = "rbxassetid://10734919336",
+		pencil = "rbxassetid://10734919691",
+		phone = "rbxassetid://10734921524",
+		play = "rbxassetid://10734923549",
+		plus = "rbxassetid://10734924532",
+		power = "rbxassetid://10734930466",
+		puzzle = "rbxassetid://10734930886",
+		radio = "rbxassetid://10734931596",
+		refreshcw = "rbxassetid://10734933222",
+		rocket = "rbxassetid://10734934585",
+		save = "rbxassetid://10734941499",
+		scan = "rbxassetid://10734942565",
+		search = "rbxassetid://10734943674",
+		send = "rbxassetid://10734943902",
+		server = "rbxassetid://10734949856",
+		settings = "rbxassetid://10734950309",
+		share = "rbxassetid://10734950813",
+		shield = "rbxassetid://10734951847",
+		shieldcheck = "rbxassetid://10734951367",
+		shoppingcart = "rbxassetid://10734952479",
+		skull = "rbxassetid://10734962068",
+		sliders = "rbxassetid://10734963400",
+		smartphone = "rbxassetid://10734963940",
+		smile = "rbxassetid://10734964441",
+		speaker = "rbxassetid://10734965419",
+		star = "rbxassetid://10734966248",
+		sun = "rbxassetid://10734974297",
+		sword = "rbxassetid://10734975486",
+		swords = "rbxassetid://10734975692",
+		target = "rbxassetid://10734977012",
+		terminal = "rbxassetid://10734982144",
+		thumbsup = "rbxassetid://10734983629",
+		timer = "rbxassetid://10734984606",
+		toggleleft = "rbxassetid://10734984834",
+		trash = "rbxassetid://10747362393",
+		trendingup = "rbxassetid://10747363465",
+		trophy = "rbxassetid://10747363809",
+		truck = "rbxassetid://10747364031",
+		tv = "rbxassetid://10747364593",
+		unlock = "rbxassetid://10747366027",
+		upload = "rbxassetid://10747366434",
+		user = "rbxassetid://10747373176",
+		users = "rbxassetid://10747373426",
+		video = "rbxassetid://10747374938",
+		volume2 = "rbxassetid://10747375679",
+		wallet = "rbxassetid://10747376205",
+		wand = "rbxassetid://10747376565",
+		wifi = "rbxassetid://10747382504",
+		wrench = "rbxassetid://10747383470",
+		x = "rbxassetid://10747384394",
+		zoomin = "rbxassetid://10747384552",
+	},
+}
+
+local function readJson(path)
+	if not (readfile and isfile) then return nil end
+	local okExists, exists = pcall(isfile, path)
+	if not okExists or not exists then return nil end
+	local okRead, raw = pcall(readfile, path)
+	if not okRead or type(raw) ~= "string" then return nil end
+	local okDecode, data = pcall(HttpService.JSONDecode, HttpService, raw)
+	if okDecode then return data end
+	return nil
+end
+
+local function writeJson(path, data)
+	if not writefile then return false end
+	local okEncode, encoded = pcall(HttpService.JSONEncode, HttpService, data)
+	if not okEncode then return false end
+	if pcall(writefile, path, encoded) then return true, encoded end
+	return false
+end
+
+do
+	local saved = readJson(SAVE_FILE)
+	if type(saved) == "table" then
+		local s = lib.Save
+		if type(saved.UISize) == "table" and tonumber(saved.UISize[1]) and tonumber(saved.UISize[2]) then
+			s.UISize = { saved.UISize[1], saved.UISize[2] }
+		end
+		if tonumber(saved.TabSize) then s.TabSize = saved.TabSize end
+		if type(saved.Theme) == "string" and lib.Themes[saved.Theme] then s.Theme = saved.Theme end
+	end
+end
+
+local palette = lib.Themes[lib.Save.Theme]
+
+local KIND_KEY = {
+	Gradient = "gradient",
+	Frame = "panel",
+	Elevated = "elevated",
+	Stroke = "stroke",
+	Text = "text",
+	TextMuted = "muted",
+	Accent = "accent",
+	Success = "success",
+	Danger = "danger",
+	ScrollBar = "accent",
+}
+
+local function colorOf(kind)
+	return palette[KIND_KEY[kind]]
+end
+
+local function defaultProp(inst, kind)
+	if inst:IsA("UIStroke") or inst:IsA("UIGradient") then return "Color" end
+	if kind == "ScrollBar" then return "ScrollBarImageColor3" end
+	if inst:IsA("ImageLabel") or inst:IsA("ImageButton") then return "ImageColor3" end
+	if inst:IsA("TextLabel") or inst:IsA("TextBox") then return "TextColor3" end
+	return "BackgroundColor3"
+end
+
+local tweenSlots = setmetatable({}, { __mode = "k" })
+
+local function tween(inst, props, duration)
+	local info = duration and TweenInfo.new(duration, Enum.EasingStyle.Quint) or DEFAULT_INFO
+	local slots = tweenSlots[inst]
+	if not slots then
+		slots = {}
+		tweenSlots[inst] = slots
+	end
+	local last
+	for prop, value in pairs(props) do
+		local running = slots[prop]
+		if running then running:Cancel() end
+		local tw = TweenService:Create(inst, info, { [prop] = value })
+		slots[prop] = tw
+		tw:Play()
+		last = tw
+	end
+	return last
+end
+
+local function tag(inst, kind, prop)
+	prop = prop or defaultProp(inst, kind)
+	local rec = lib.Instances[inst]
+	if not rec then
+		rec = {}
+		lib.Instances[inst] = rec
+		inst.Destroying:Connect(function()
+			lib.Instances[inst] = nil
+		end)
+	end
+	rec[prop] = kind
+	inst[prop] = colorOf(kind)
+	return inst
+end
+
+local function setKind(inst, kind, prop)
+	prop = prop or defaultProp(inst, kind)
+	local rec = lib.Instances[inst]
+	if rec then rec[prop] = kind end
+	tween(inst, { [prop] = colorOf(kind) })
+end
+
+local function repaint()
+	for inst, props in pairs(lib.Instances) do
+		for prop, kind in pairs(props) do
+			inst[prop] = colorOf(kind)
+		end
+	end
+end
+
+local function apply(inst, props)
+	if props then
+		for k, v in pairs(props) do
+			inst[k] = v
+		end
+	end
+	return inst
+end
+
+local function mk(class, props, children)
+	local inst = Instance.new(class)
+	if inst:IsA("GuiObject") then inst.BorderSizePixel = 0 end
+	if inst:IsA("GuiButton") then inst.AutoButtonColor = false end
+	if class == "TextButton" then inst.Text = "" end
+	local parent
+	if props then
+		for k, v in pairs(props) do
+			if k == "Parent" then
+				parent = v
+			else
+				inst[k] = v
+			end
+		end
+	end
+	if children then
+		for _, child in ipairs(children) do
+			child.Parent = inst
+		end
+	end
+	if parent then inst.Parent = parent end
+	return inst
+end
+
+local function factory(name, fn)
+	lib.Elements[name] = fn
+end
+
+local function build(name, ...)
+	return lib.Elements[name](...)
+end
+
+factory("round", function(parent, radius)
+	return mk("UICorner", { CornerRadius = UDim.new(0, radius or 6), Parent = parent })
+end)
+
+factory("outline", function(parent, kind, thickness)
+	local stroke = mk("UIStroke", {
+		Thickness = thickness or 1,
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+		Parent = parent,
+	})
+	return tag(stroke, kind or "Stroke")
+end)
+
+factory("caption", function(parent, props, kind)
+	local base = {
+		BackgroundTransparency = 1,
+		Font = Enum.Font.Gotham,
+		TextSize = 12,
+		Text = "",
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Size = UDim2.new(1, 0, 0, 16),
+		Parent = parent,
+	}
+	for k, v in pairs(props or {}) do
+		base[k] = v
+	end
+	return tag(mk("TextLabel", base), kind or "Text")
+end)
+
+factory("rule", function(parent, props)
+	local base = { Size = UDim2.new(1, 0, 0, 1), Parent = parent }
+	for k, v in pairs(props or {}) do
+		base[k] = v
+	end
+	return tag(mk("Frame", base), "Stroke")
+end)
+
+factory("row", function(page, title, desc, reserve, clickable)
+	local row = mk(clickable and "TextButton" or "Frame", {
+		Name = "Option",
+		Size = UDim2.new(1, 0, 0, 26),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Parent = page,
+	})
+	tag(row, "Frame")
+	build("round", row, 6)
+	build("outline", row, "Stroke").Transparency = 0.5
+
+	local holder = mk("Frame", {
+		Name = "Labels",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -reserve, 0, 26),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Position = UDim2.fromOffset(10, 0),
+		Parent = row,
+	}, {
+		mk("UIListLayout", {
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Padding = UDim.new(0, 2),
+		}),
+		mk("UIPadding", {
+			PaddingTop = UDim.new(0, 5),
+			PaddingBottom = UDim.new(0, 5),
+		}),
+	})
+
+	local titleLabel = build("caption", holder, {
+		Text = tostring(title or ""),
+		Font = Enum.Font.GothamMedium,
+		TextSize = 12,
+		TextWrapped = true,
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Size = UDim2.new(1, 0, 0, 0),
+		LayoutOrder = 1,
+	}, "Text")
+
+	local descLabel = build("caption", holder, {
+		TextSize = 10,
+		TextWrapped = true,
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Size = UDim2.new(1, 0, 0, 0),
+		LayoutOrder = 2,
+		Visible = false,
+	}, "TextMuted")
+
+	local labels = {}
+	function labels.setTitle(text)
+		titleLabel.Text = tostring(text)
+	end
+	function labels.setDesc(text)
+		local on = type(text) == "string" and text:match("%S") ~= nil
+		descLabel.Visible = on
+		descLabel.Text = on and text or ""
+	end
+	labels.setDesc(desc)
+
+	if clickable then
+		row.MouseEnter:Connect(function()
+			setKind(row, "Elevated")
+		end)
+		row.MouseLeave:Connect(function()
+			setKind(row, "Frame")
+		end)
+	end
+
+	return row, labels
+end)
+
+local function field(cfg, index, ...)
+	if type(cfg) ~= "table" then return nil end
+	if index ~= nil and cfg[index] ~= nil then return cfg[index] end
+	for _, key in ipairs({ ... }) do
+		if cfg[key] ~= nil then return cfg[key] end
+	end
+	return nil
+end
+
+local function toCallbacks(fn)
+	local list = {}
+	if type(fn) == "function" then
+		list[1] = fn
+	elseif type(fn) == "table" and fn[1] ~= nil and fn[2] ~= nil then
+		list[1] = function(value)
+			fn[1][fn[2]] = value
+		end
+	end
+	return list
+end
+
+local function fire(list, ...)
+	for _, fn in ipairs(list) do
+		task.spawn(fn, ...)
+	end
+end
+
+local function listOptions(opts)
+	local list = {}
+	if type(opts) ~= "table" then return list end
+	if #opts > 0 then
+		for _, v in ipairs(opts) do
+			table.insert(list, tostring(v))
+		end
+	else
+		for k in pairs(opts) do
+			table.insert(list, tostring(k))
+		end
+		table.sort(list)
+	end
+	return list
+end
+
+local pendingWrite = false
+
+local function hasFlag(name)
+	return type(name) == "string" and lib.Flags[name] ~= nil
+end
+
+local function setFlag(name, value)
+	if type(name) ~= "string" then return end
+	if lib.Flags[name] == value and type(value) ~= "table" then return end
+	lib.Flags[name] = value
+	Bus:FireConnection("FlagsChanged", name, value)
+	if pendingWrite then return end
+	pendingWrite = true
+	task.delay(0.1, function()
+		pendingWrite = false
+		local file = lib.Settings.ScriptFile
+		if type(file) ~= "string" then return end
+		local ok, encoded = writeJson(file, lib.Flags)
+		if ok then Bus:FireConnection("FileSaved", "Script-Flags", file, encoded) end
+	end)
+end
+
+local function loadFlags()
+	local file = lib.Settings.ScriptFile
+	if type(file) ~= "string" then return end
+	local data = readJson(file)
+	if type(data) == "table" then
+		for k, v in pairs(data) do
+			lib.Flags[k] = v
+		end
+	end
+end
+
+local function bindDrag(trash, handle, handlers)
+	local active, origin, current = false, nil, nil
+
+	handle.InputBegan:Connect(function(input)
+		local kind = input.UserInputType
+		if kind ~= Enum.UserInputType.MouseButton1 and kind ~= Enum.UserInputType.Touch then return end
+		active, origin, current = true, input.Position, input
+		if handlers.start then handlers.start(input.Position) end
+		local watcher
+		watcher = input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				watcher:Disconnect()
+				if active then
+					active = false
+					if handlers.finish then handlers.finish() end
+				end
+			end
+		end)
+	end)
+
+	local conn = UserInputService.InputChanged:Connect(function(input)
+		if not active then return end
+		local kind = input.UserInputType
+		if kind == Enum.UserInputType.MouseMovement or (kind == Enum.UserInputType.Touch and input == current) then
+			handlers.move(input.Position - origin, input.Position)
+		end
+	end)
+	table.insert(trash, conn)
+	return conn
+end
+
+local scalers = setmetatable({}, { __mode = "k" })
+
+local function calcScale()
+	local cam = Workspace.CurrentCamera
+	local viewport = cam and cam.ViewportSize or Vector2.new(1280, 720)
+	return viewport.Y / lib._virtualHeight
+end
+
+function lib:SetTheme(name)
+	local theme = lib.Themes[name]
+	if type(theme) ~= "table" then return false end
+	for _, key in pairs(KIND_KEY) do
+		if theme[key] == nil then return false end
+	end
+	lib.Save.Theme = name
+	palette = theme
+	writeJson(SAVE_FILE, lib.Save)
+	Bus:FireConnection("ThemeChanged", name)
+	repaint()
+	return true
+end
+
+function lib:SetScale(px)
+	px = tonumber(px)
+	if not px then return end
+	lib._virtualHeight = math.clamp(px, 300, 2000)
+	for scaler in pairs(scalers) do
+		if scaler.Parent then
+			scaler.Scale = calcScale()
+		else
+			scalers[scaler] = nil
+		end
+	end
+end
+
+function lib:GetIcon(name)
+	if type(name) == "number" then return "rbxassetid://" .. math.floor(name) end
+	if type(name) ~= "string" or name == "" then return "" end
+	if name:find("rbxassetid://", 1, true) or name:find("rbxasset://", 1, true) then return name end
+	local key = name:lower():gsub("^lucide[:%-_%s]*", ""):gsub("[%s%-_]", "")
+	if key:match("^%d+$") then return "rbxassetid://" .. key end
+	return lib.Icons[key] or lib.Icons.circle
+end
+
+function lib:MakeWindow(cfg)
+	cfg = type(cfg) == "table" and cfg or {}
+	local title = tostring(field(cfg, 1, "Title", "Name") or "Nova UI")
+	local subtitle = tostring(field(cfg, 2, "SubTitle", "Subtitle") or "")
+	local saveFile = field(cfg, 3, "SaveFile", "SaveFolder")
+	lib.Settings.ScriptFile = type(saveFile) == "string" and saveFile or false
+	loadFlags()
+
+	if lib._closeActive then lib._closeActive() end
+	local existing = CoreGui:FindFirstChild(GUI_NAME)
+	if existing then existing:Destroy() end
+
+	local saved = lib.Save
+	local trash = {}
+	local popups = {}
+	local tabs = {}
+	local win = {}
+	local activeTab
+	local minimized, savedSize = false, nil
+	local dialogObj
+
+	local gui = mk("ScreenGui", {
+		Name = GUI_NAME,
+		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		DisplayOrder = 1000,
+		Parent = CoreGui,
+	})
+	local scaler = mk("UIScale", { Scale = calcScale(), Parent = gui })
+	scalers[scaler] = true
+
+	local cam = Workspace.CurrentCamera
+	if cam then
+		table.insert(trash, cam:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+			scaler.Scale = calcScale()
+		end))
+	end
+
+	local function screenSize()
+		return gui.AbsoluteSize / scaler.Scale
+	end
+
+	local width = math.clamp(tonumber(saved.UISize[1]) or 550, MIN_W, MAX_W)
+	local height = math.clamp(tonumber(saved.UISize[2]) or 380, MIN_H, MAX_H)
+	local tabWidth = math.clamp(tonumber(saved.TabSize) or 160, MIN_TAB, MAX_TAB)
+	local view = screenSize()
+
+	local shell = mk("Frame", {
+		Name = "Hub",
+		Size = UDim2.fromOffset(width, height),
+		Position = UDim2.fromOffset(math.max(0, (view.X - width) / 2), math.max(0, (view.Y - height) / 2)),
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		Active = true,
+		ClipsDescendants = true,
+		Parent = gui,
+	})
+	tag(mk("UIGradient", { Rotation = 45, Parent = shell }), "Gradient")
+	build("round", shell, 7)
+	build("outline", shell, "Stroke")
+
+	local topbar = mk("Frame", {
+		Name = "Top Bar",
+		Size = UDim2.new(1, 0, 0, HEADER_H - 1),
+		BackgroundTransparency = 1,
+		Parent = shell,
+	})
+	build("rule", shell, { Name = "TopLine", Position = UDim2.fromOffset(0, HEADER_H - 1) })
+
+	local dragZone = mk("TextButton", {
+		Name = "DragZone",
+		Size = UDim2.new(1, -64, 1, 0),
+		BackgroundTransparency = 1,
+		Parent = topbar,
+	})
+
+	local titleRow = mk("Frame", {
+		Name = "TitleRow",
+		Size = UDim2.new(0, 0, 1, 0),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Position = UDim2.fromOffset(14, 0),
+		BackgroundTransparency = 1,
+		Parent = topbar,
+	}, {
+		mk("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Padding = UDim.new(0, 6),
+		}),
+	})
+	local titleLabel = build("caption", titleRow, {
+		Text = title,
+		Font = Enum.Font.GothamMedium,
+		TextSize = 12,
+		AutomaticSize = Enum.AutomaticSize.XY,
+		Size = UDim2.new(),
+		LayoutOrder = 1,
+	}, "Text")
+	local subLabel = build("caption", titleRow, {
+		Text = subtitle,
+		TextSize = 9,
+		AutomaticSize = Enum.AutomaticSize.XY,
+		Size = UDim2.new(),
+		LayoutOrder = 2,
+		Visible = subtitle ~= "",
+	}, "TextMuted")
+
+	local function windowButton(icon, xOffset, hoverKind, name)
+		local btn = tag(mk("ImageButton", {
+			Name = name,
+			Size = UDim2.fromOffset(14, 14),
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, xOffset, 0.5, 0),
+			BackgroundTransparency = 1,
+			Image = lib:GetIcon(icon),
+			Parent = topbar,
+		}), "TextMuted")
+		btn.MouseEnter:Connect(function()
+			setKind(btn, hoverKind)
+		end)
+		btn.MouseLeave:Connect(function()
+			setKind(btn, "TextMuted")
+		end)
+		return btn
+	end
+	local btnMin = windowButton("minus", -36, "Text", "Minimize")
+	local btnClose = windowButton("x", -12, "Danger", "Close")
+
+	local body = mk("Frame", {
+		Name = "Body",
+		Position = UDim2.fromOffset(0, HEADER_H),
+		Size = UDim2.new(1, 0, 1, -HEADER_H),
+		BackgroundTransparency = 1,
+		ClipsDescendants = true,
+		Parent = shell,
+	})
+
+	local sidebar = mk("ScrollingFrame", {
+		Name = "Tab Scroll",
+		Size = UDim2.new(0, tabWidth, 1, 0),
+		BackgroundTransparency = 1,
+		ScrollBarThickness = 2,
+		ScrollBarImageTransparency = 0.2,
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		Parent = body,
+	}, {
+		mk("UIPadding", {
+			PaddingLeft = UDim.new(0, 10),
+			PaddingRight = UDim.new(0, 10),
+			PaddingTop = UDim.new(0, 10),
+			PaddingBottom = UDim.new(0, 10),
+		}),
+		mk("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 5) }),
+	})
+	tag(sidebar, "ScrollBar")
+
+	local pages = mk("Frame", {
+		Name = "Containers",
+		Position = UDim2.fromOffset(tabWidth, 0),
+		Size = UDim2.new(1, -tabWidth, 1, 0),
+		BackgroundTransparency = 1,
+		ClipsDescendants = true,
+		Parent = body,
+	})
+
+	local split = mk("TextButton", {
+		Name = "TabSplit",
+		Size = UDim2.new(0, 6, 1, 0),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0, tabWidth, 0, 0),
+		BackgroundTransparency = 1,
+		ZIndex = 5,
+		Parent = body,
+	})
+	local splitLine = build("rule", split, {
+		Size = UDim2.new(0, 1, 1, -12),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+	})
+	split.MouseEnter:Connect(function()
+		setKind(splitLine, "Accent")
+	end)
+	split.MouseLeave:Connect(function()
+		setKind(splitLine, "Stroke")
+	end)
+
+	local function applyTabWidth(w)
+		tabWidth = w
+		sidebar.Size = UDim2.new(0, w, 1, 0)
+		pages.Position = UDim2.fromOffset(w, 0)
+		pages.Size = UDim2.new(1, -w, 1, 0)
+		split.Position = UDim2.new(0, w, 0, 0)
+	end
+
+	local splitOrigin
+	bindDrag(trash, split, {
+		start = function()
+			splitOrigin = tabWidth
+		end,
+		move = function(delta)
+			applyTabWidth(math.clamp(splitOrigin + delta.X / scaler.Scale, MIN_TAB, MAX_TAB))
+		end,
+		finish = function()
+			saved.TabSize = tabWidth
+			writeJson(SAVE_FILE, saved)
+		end,
+	})
+
+	local grip = mk("TextButton", {
+		Name = "ResizeGrip",
+		Size = UDim2.fromOffset(36, 36),
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		ZIndex = 5,
+		Parent = shell,
+	})
+	local glyph = mk("Frame", {
+		Size = UDim2.fromOffset(14, 14),
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(1, -5, 1, -5),
+		BackgroundTransparency = 1,
+		Parent = grip,
+	})
+	tag(mk("Frame", {
+		Size = UDim2.fromOffset(14, 1),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Rotation = -45,
+		Parent = glyph,
+	}), "TextMuted")
+	tag(mk("Frame", {
+		Size = UDim2.fromOffset(8, 1),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 3, 0.5, 3),
+		Rotation = -45,
+		Parent = glyph,
+	}), "TextMuted")
+
+	local resizeOrigin
+	bindDrag(trash, grip, {
+		start = function()
+			resizeOrigin = Vector2.new(shell.Size.X.Offset, shell.Size.Y.Offset)
+		end,
+		move = function(delta)
+			local s = scaler.Scale
+			shell.Size = UDim2.fromOffset(
+				math.clamp(resizeOrigin.X + delta.X / s, MIN_W, MAX_W),
+				math.clamp(resizeOrigin.Y + delta.Y / s, MIN_H, MAX_H)
+			)
+		end,
+		finish = function()
+			saved.UISize = { shell.Size.X.Offset, shell.Size.Y.Offset }
+			writeJson(SAVE_FILE, saved)
+		end,
+	})
+
+	local dragOrigin
+	bindDrag(trash, dragZone, {
+		start = function()
+			dragOrigin = Vector2.new(shell.Position.X.Offset, shell.Position.Y.Offset)
+		end,
+		move = function(delta)
+			local s = scaler.Scale
+			local screen = screenSize()
+			local size = shell.AbsoluteSize / s
+			shell.Position = UDim2.fromOffset(
+				math.clamp(dragOrigin.X + delta.X / s, 0, math.max(0, screen.X - size.X)),
+				math.clamp(dragOrigin.Y + delta.Y / s, 0, math.max(0, screen.Y - size.Y))
+			)
+		end,
+	})
+
+	shell:GetPropertyChangedSignal("Visible"):Connect(function()
+		for _, close in ipairs(popups) do
+			close()
+		end
+	end)
+
+	local function destroyWindow()
+		for _, conn in ipairs(trash) do
+			pcall(function()
+				conn:Disconnect()
+			end)
+		end
+		table.clear(trash)
+		table.clear(lib.Tabs)
+		scalers[scaler] = nil
+		if lib._closeActive == destroyWindow then lib._closeActive = nil end
+		gui:Destroy()
+	end
+	lib._closeActive = destroyWindow
+
+	function win:Destroy()
+		destroyWindow()
+	end
+
+	function win:Set(newTitle, newSubtitle)
+		if type(newTitle) == "string" then titleLabel.Text = newTitle end
+		if type(newSubtitle) == "string" then
+			subLabel.Text = newSubtitle
+			subLabel.Visible = newSubtitle ~= ""
+		end
+	end
+
+	function win:Minimize()
+		shell.Visible = not shell.Visible
+	end
+
+	function win:MinimizeBtn()
+		if minimized then
+			minimized = false
+			btnMin.Image = lib:GetIcon("minus")
+			body.Visible = true
+			grip.Visible = true
+			tween(shell, { Size = savedSize }, 0.25)
+		else
+			minimized = true
+			savedSize = shell.Size
+			btnMin.Image = lib:GetIcon("plus")
+			body.Visible = false
+			grip.Visible = false
+			tween(shell, { Size = UDim2.new(savedSize.X.Scale, savedSize.X.Offset, 0, HEADER_H) }, 0.25)
+		end
+	end
+
+	function win:Dialog(dcfg)
+		if dialogObj then return dialogObj end
+		if minimized then win:MinimizeBtn() end
+		dcfg = type(dcfg) == "table" and dcfg or {}
+		local dTitle = tostring(field(dcfg, 1, "Title") or "Dialog")
+		local dText = tostring(field(dcfg, 2, "Text", "Description") or "")
+		local dOptions = field(dcfg, 3, "Options") or {}
+
+		local backdrop = mk("TextButton", {
+			Name = "Dialog",
+			Size = UDim2.fromScale(1, 1),
+			BackgroundColor3 = Color3.new(0, 0, 0),
+			BackgroundTransparency = 1,
+			Active = true,
+			ZIndex = 20,
+			Parent = shell,
+		})
+		local card = mk("CanvasGroup", {
+			Name = "Card",
+			Size = UDim2.fromOffset(260, 160),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			GroupTransparency = 1,
+			Parent = backdrop,
+		})
+		tag(card, "Elevated")
+		build("round", card, 7)
+		build("outline", card, "Stroke")
+		local cardScale = mk("UIScale", { Scale = 0.94, Parent = card })
+
+		build("caption", card, {
+			Text = dTitle,
+			Font = Enum.Font.GothamBold,
+			TextSize = 14,
+			Position = UDim2.fromOffset(16, 12),
+			Size = UDim2.new(1, -32, 0, 18),
+		}, "Text")
+		build("caption", card, {
+			Text = dText,
+			TextSize = 11,
+			TextWrapped = true,
+			TextYAlignment = Enum.TextYAlignment.Top,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			Position = UDim2.fromOffset(16, 38),
+			Size = UDim2.new(1, -32, 0, 70),
+		}, "TextMuted")
+
+		local buttonRow = mk("Frame", {
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, -32, 0, 28),
+			AnchorPoint = Vector2.new(0.5, 1),
+			Position = UDim2.new(0.5, 0, 1, -14),
+			Parent = card,
+		}, {
+			mk("UIListLayout", {
+				FillDirection = Enum.FillDirection.Horizontal,
+				SortOrder = Enum.SortOrder.LayoutOrder,
+				HorizontalAlignment = Enum.HorizontalAlignment.Center,
+				VerticalAlignment = Enum.VerticalAlignment.Center,
+				Padding = UDim.new(0, 8),
+			}),
+		})
+
+		tween(backdrop, { BackgroundTransparency = 0.5 })
+		tween(card, { GroupTransparency = 0 })
+		tween(cardScale, { Scale = 1 })
+
+		local dlg, buttonCount, closed = {}, 0, false
+
+		local function relayout()
+			local gap = 8
+			for _, child in ipairs(buttonRow:GetChildren()) do
+				if child:IsA("TextButton") then
+					child.Size = UDim2.new(1 / buttonCount, -(gap * (buttonCount - 1)) / buttonCount, 1, 0)
+				end
+			end
+		end
+
+		function dlg:Close()
+			if closed then return end
+			closed = true
+			dialogObj = nil
+			tween(backdrop, { BackgroundTransparency = 1 })
+			tween(card, { GroupTransparency = 1 })
+			tween(cardScale, { Scale = 0.94 })
+			task.delay(0.2, function()
+				backdrop:Destroy()
+			end)
+		end
+
+		function dlg:Button(bcfg)
+			local label = tostring(field(bcfg, 1, "Name", "Title") or "OK")
+			local callback = field(bcfg, 2, "Callback")
+			buttonCount += 1
+			local btn = mk("TextButton", {
+				Text = label,
+				Font = Enum.Font.GothamBold,
+				TextSize = 11,
+				Size = UDim2.new(0, 80, 1, 0),
+				LayoutOrder = buttonCount,
+				Parent = buttonRow,
+			})
+			tag(btn, "Frame")
+			tag(btn, "Text", "TextColor3")
+			build("round", btn, 6)
+			build("outline", btn, "Stroke")
+			btn.MouseEnter:Connect(function()
+				setKind(btn, "Stroke")
+			end)
+			btn.MouseLeave:Connect(function()
+				setKind(btn, "Frame")
+			end)
+			btn.Activated:Connect(function()
+				dlg:Close()
+				if type(callback) == "function" then task.spawn(callback) end
+			end)
+			relayout()
+			return btn
+		end
+
+		for _, option in ipairs(dOptions) do
+			dlg:Button(option)
+		end
+		dialogObj = dlg
+		return dlg
+	end
+
+	function win:CloseBtn()
+		win:Dialog({
+			Title = "Close",
+			Text = "Close this window? Anything still running from it may stop working until you execute it again.",
+			Options = {
+				{ "Confirm", destroyWindow },
+				{ "Cancel" },
+			},
+		})
+	end
+
+	btnMin.Activated:Connect(function()
+		win:MinimizeBtn()
+	end)
+	btnClose.Activated:Connect(function()
+		win:CloseBtn()
+	end)
+
+	function win:AddMinimizeButton(mcfg)
+		mcfg = type(mcfg) == "table" and mcfg or {}
+		local btn = mk("ImageButton", {
+			Name = "MinimizeFloat",
+			Size = UDim2.fromOffset(36, 36),
+			Position = UDim2.fromOffset(20, 60),
+			Parent = gui,
+		})
+		tag(btn, "Frame", "BackgroundColor3")
+		tag(mk("ImageLabel", {
+			Size = UDim2.fromOffset(18, 18),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			BackgroundTransparency = 1,
+			Image = lib:GetIcon("eye"),
+			Parent = btn,
+		}), "Accent")
+		local corner = build("round", btn, 8)
+		local stroke = build("outline", btn, "Stroke")
+		apply(btn, mcfg.Button)
+		apply(corner, mcfg.Corner)
+		apply(stroke, mcfg.Stroke)
+
+		local origin, moved = nil, false
+		bindDrag(trash, btn, {
+			start = function()
+				origin = Vector2.new(btn.Position.X.Offset, btn.Position.Y.Offset)
+				moved = false
+			end,
+			move = function(delta)
+				if delta.Magnitude > 5 then moved = true end
+				local s = scaler.Scale
+				local screen = screenSize()
+				btn.Position = UDim2.fromOffset(
+					math.clamp(origin.X + delta.X / s, 0, math.max(0, screen.X - 36)),
+					math.clamp(origin.Y + delta.Y / s, 0, math.max(0, screen.Y - 36))
+				)
+			end,
+		})
+		btn.Activated:Connect(function()
+			if moved then
+				moved = false
+				return
+			end
+			win:Minimize()
+		end)
+
+		return { Button = btn, Corner = corner, Stroke = stroke }
+	end
+
+	function win:SelectTab(which)
+		if type(which) == "number" then
+			local record = tabs[which]
+			if record then record.api:Enable() end
+		elseif type(which) == "table" and which.Enable then
+			which:Enable()
+		end
+	end
+
+	function win:MakeTab(first, second)
+		local tcfg
+		if type(first) == "table" then
+			tcfg = first
+		elseif type(first) == "string" then
+			tcfg = { first, second }
+		else
+			tcfg = {}
+		end
+		local name = tostring(field(tcfg, 1, "Title", "Name") or "Tab!")
+		local iconName = field(tcfg, 2, "Icon")
+		local icon = ((type(iconName) == "string" and iconName ~= "") or type(iconName) == "number")
+			and lib:GetIcon(iconName) or nil
+
+		local row = mk("TextButton", {
+			Name = "Tab",
+			Size = UDim2.new(1, 0, 0, 26),
+			BackgroundTransparency = 1,
+			LayoutOrder = #tabs + 1,
+			Parent = sidebar,
+		})
+		tag(row, "Elevated")
+		build("round", row, 6)
+
+		local bar = tag(mk("Frame", {
+			Size = UDim2.fromOffset(3, 0),
+			AnchorPoint = Vector2.new(0, 0.5),
+			Position = UDim2.new(0, 1, 0.5, 0),
+			BackgroundTransparency = 1,
+			Parent = row,
+		}), "Accent")
+		build("round", bar, 2)
+
+		local img
+		if icon then
+			img = tag(mk("ImageLabel", {
+				Size = UDim2.fromOffset(14, 14),
+				AnchorPoint = Vector2.new(0, 0.5),
+				Position = UDim2.new(0, 10, 0.5, 0),
+				BackgroundTransparency = 1,
+				Image = icon,
+				Parent = row,
+			}), "TextMuted")
+		end
+
+		local label = build("caption", row, {
+			Text = name,
+			Font = Enum.Font.GothamMedium,
+			TextSize = 11,
+			Position = UDim2.fromOffset(icon and 30 or 14, 0),
+			Size = UDim2.new(1, icon and -34 or -18, 1, 0),
+			TextTruncate = Enum.TextTruncate.AtEnd,
+		}, "TextMuted")
+
+		local page = mk("ScrollingFrame", {
+			Name = ("Container %i [ %s ]"):format(#tabs + 1, name),
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+			ScrollBarThickness = 2,
+			ScrollBarImageTransparency = 0.2,
+			CanvasSize = UDim2.new(),
+			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			ScrollingDirection = Enum.ScrollingDirection.Y,
+			Visible = false,
+			Parent = pages,
+		}, {
+			mk("UIPadding", {
+				PaddingLeft = UDim.new(0, 10),
+				PaddingRight = UDim.new(0, 10),
+				PaddingTop = UDim.new(0, 10),
+				PaddingBottom = UDim.new(0, 10),
+			}),
+			mk("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 5) }),
+		})
+		tag(page, "ScrollBar")
+
+		local tabObj = { Cont = page }
+		local record = { api = tabObj, page = page, row = row }
+		local order = 0
+
+		local function nextOrder()
+			order += 1
+			return order
+		end
+
+		function record.paint(on)
+			setKind(label, on and "Text" or "TextMuted")
+			if img then setKind(img, on and "Text" or "TextMuted") end
+			tween(bar, {
+				Size = UDim2.fromOffset(3, on and 14 or 0),
+				BackgroundTransparency = on and 0 or 1,
+			})
+			tween(row, { BackgroundTransparency = on and 0.7 or 1 })
+		end
+
+		row.MouseEnter:Connect(function()
+			if activeTab ~= record then tween(row, { BackgroundTransparency = 0.6 }) end
+		end)
+		row.MouseLeave:Connect(function()
+			tween(row, { BackgroundTransparency = activeTab == record and 0.7 or 1 })
+		end)
+		row.Activated:Connect(function()
+			tabObj:Enable()
+		end)
+
+		function tabObj:Enable()
+			if activeTab == record then return end
+			if activeTab then
+				activeTab.paint(false)
+				activeTab.page.Visible = false
+			end
+			activeTab = record
+			page.Position = UDim2.fromOffset(0, 12)
+			page.Visible = true
+			tween(page, { Position = UDim2.fromOffset(0, 0) }, 0.3)
+			record.paint(true)
+		end
+
+		function tabObj:Disable()
+			record.paint(false)
+			page.Visible = false
+			if activeTab == record then activeTab = nil end
+		end
+
+		function tabObj:Visible(state)
+			if state == nil then state = not row.Visible end
+			row.Visible = state
+			if not state and activeTab == record then
+				tabObj:Disable()
+				for _, other in ipairs(tabs) do
+					if other ~= record and other.row.Visible then
+						other.api:Enable()
+						break
+					end
+				end
+			end
+		end
+
+		function tabObj:Destroy()
+			local idx = table.find(tabs, record)
+			if idx then table.remove(tabs, idx) end
+			local wasActive = activeTab == record
+			if wasActive then activeTab = nil end
+			row:Destroy()
+			page:Destroy()
+			if wasActive and tabs[1] then tabs[1].api:Enable() end
+		end
+
+		local function finish(element)
+			local api = {}
+			function api:Visible(state)
+				if state == nil then state = not element.Visible end
+				element.Visible = state
+			end
+			function api:Destroy()
+				element:Destroy()
+			end
+			return api
+		end
+
+		function tabObj:AddSection(scfg)
+			local text = type(scfg) == "string" and scfg
+				or tostring(field(scfg, 1, "Name", "Title", "Section") or "Section")
+			local frame = mk("Frame", {
+				Name = "Option",
+				Size = UDim2.new(1, 0, 0, 24),
+				BackgroundTransparency = 1,
+				LayoutOrder = nextOrder(),
+				Parent = page,
+			})
+			local lbl = build("caption", frame, {
+				Text = text,
+				Font = Enum.Font.GothamBold,
+				TextSize = 13,
+				Position = UDim2.fromOffset(2, 0),
+				Size = UDim2.new(1, -2, 0, 20),
+				TextTruncate = Enum.TextTruncate.AtEnd,
+			}, "Accent")
+			build("rule", frame, { Position = UDim2.fromOffset(0, 22) })
+			local section = finish(frame)
+			function section:Set(newText)
+				if newText ~= nil then
+					lbl.Text = tostring(type(newText) == "function" and newText() or newText)
+				end
+			end
+			return section
+		end
+
+		function tabObj:AddParagraph(pcfg)
+			local row2, labels = build(
+				"row", page,
+				field(pcfg, 1, "Title", "Name") or "Paragraph",
+				field(pcfg, 2, "Text", "Description"),
+				20, false
+			)
+			row2.LayoutOrder = nextOrder()
+			local para = finish(row2)
+			function para:SetTitle(value)
+				labels.setTitle(type(value) == "function" and value() or value)
+			end
+			function para:SetDesc(value)
+				labels.setDesc(tostring(type(value) == "function" and value() or value))
+			end
+			function para:Set(a, b)
+				if a ~= nil and b ~= nil then
+					para:SetTitle(a)
+					para:SetDesc(b)
+				elseif a ~= nil then
+					para:SetDesc(a)
+				end
+			end
+			return para
+		end
+
+		function tabObj:AddButton(bcfg)
+			local name = field(bcfg, 1, "Name", "Title") or "Button!"
+			local desc = field(bcfg, nil, "Description", "Desc")
+			local cbs = toCallbacks(field(bcfg, 2, "Callback"))
+			local row2, labels = build("row", page, name, desc, 44, true)
+			row2.LayoutOrder = nextOrder()
+			tag(mk("ImageLabel", {
+				Size = UDim2.fromOffset(14, 14),
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, -10, 0.5, 0),
+				BackgroundTransparency = 1,
+				Image = lib:GetIcon("chevronright"),
+				Parent = row2,
+			}), "TextMuted")
+			row2.Activated:Connect(function()
+				fire(cbs)
+			end)
+
+			local button = finish(row2)
+			function button:Callback(fn)
+				if type(fn) == "function" then table.insert(cbs, fn) end
+			end
+			function button:Set(a, b)
+				if type(a) == "function" then
+					table.clear(cbs)
+					cbs[1] = a
+				elseif type(a) == "string" then
+					labels.setTitle(a)
+					if type(b) == "string" then labels.setDesc(b) end
+				end
+			end
+			return button
+		end
+
+		function tabObj:AddToggle(tgcfg)
+			local name = field(tgcfg, 1, "Name", "Title") or "Toggle"
+			local desc = field(tgcfg, nil, "Description", "Desc")
+			local state = field(tgcfg, 2, "Default")
+			if state == nil then state = false end
+			local cbs = toCallbacks(field(tgcfg, 3, "Callback"))
+			local flag = field(tgcfg, 4, "Flag")
+			if hasFlag(flag) then state = lib.Flags[flag] == true end
+			state = state and true or false
+
+			local row2, labels = build("row", page, name, desc, 64, true)
+			row2.LayoutOrder = nextOrder()
+
+			local track = tag(mk("Frame", {
+				Size = UDim2.fromOffset(36, 18),
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, -10, 0.5, 0),
+				Parent = row2,
+			}), state and "Accent" or "Stroke")
+			build("round", track, 9)
+			local knob = mk("Frame", {
+				Size = UDim2.fromOffset(12, 12),
+				AnchorPoint = Vector2.new(0, 0.5),
+				Position = UDim2.new(0, state and 21 or 3, 0.5, 0),
+				BackgroundColor3 = Color3.new(1, 1, 1),
+				Parent = track,
+			})
+			build("round", knob, 6)
+
+			local function render()
+				tween(knob, { Position = UDim2.new(0, state and 21 or 3, 0.5, 0) })
+				setKind(track, state and "Accent" or "Stroke")
+			end
+
+			local function setState(value)
+				state = value and true or false
+				setFlag(flag, state)
+				render()
+				fire(cbs, state)
+			end
+
+			row2.Activated:Connect(function()
+				setState(not state)
+			end)
+
+			setFlag(flag, state)
+			task.defer(function()
+				fire(cbs, state)
+			end)
+
+			local toggle = finish(row2)
+			function toggle:Callback(fn)
+				if type(fn) == "function" then table.insert(cbs, fn) end
+			end
+			function toggle:Set(a, b)
+				if type(a) == "boolean" then
+					setState(a)
+				elseif type(a) == "string" then
+					labels.setTitle(a)
+					if type(b) == "string" then labels.setDesc(b) end
+				elseif type(a) == "function" then
+					table.clear(cbs)
+					cbs[1] = a
+				end
+			end
+			return toggle
+		end
+
+		function tabObj:AddSlider(scfg)
+			local name = field(scfg, 1, "Name", "Title") or "Slider!"
+			local desc = field(scfg, nil, "Description", "Desc")
+			local minV = tonumber(field(scfg, 2, "MinValue", "Min")) or 0
+			local maxV = tonumber(field(scfg, 3, "MaxValue", "Max")) or 100
+			local step = tonumber(field(scfg, 4, "Increase", "Step")) or 1
+			local value = tonumber(field(scfg, 5, "Default")) or minV
+			local cbs = toCallbacks(field(scfg, 6, "Callback"))
+			local flag = field(scfg, 7, "Flag")
+			if hasFlag(flag) then value = tonumber(lib.Flags[flag]) or value end
+			if maxV <= minV then maxV = minV + 1 end
+			if step <= 0 then step = 1 end
+
+			local function snap(v)
+				v = math.clamp(v, minV, maxV)
+				v = minV + math.floor((v - minV) / step + 0.5) * step
+				v = math.clamp(v, minV, maxV)
+				return tonumber(string.format("%.8g", v))
+			end
+			value = snap(value)
+
+			local row2, labels = build("row", page, name, desc, 184, true)
+			row2.LayoutOrder = nextOrder()
+
+			local right = mk("Frame", {
+				BackgroundTransparency = 1,
+				Size = UDim2.new(0, 170, 1, 0),
+				AnchorPoint = Vector2.new(1, 0),
+				Position = UDim2.new(1, 0, 0, 0),
+				Parent = row2,
+			})
+			local hit = mk("TextButton", {
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, -52, 1, 0),
+				Parent = right,
+			})
+			local track = tag(mk("Frame", {
+				Size = UDim2.new(1, -8, 0, 6),
+				AnchorPoint = Vector2.new(0, 0.5),
+				Position = UDim2.new(0, 4, 0.5, 0),
+				Parent = hit,
+			}), "Stroke")
+			build("round", track, 3)
+			local fill = tag(mk("Frame", { Size = UDim2.fromScale(0, 1), Parent = track }), "Accent")
+			build("round", fill, 3)
+			local knob = tag(mk("Frame", {
+				Size = UDim2.fromOffset(8, 14),
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.fromScale(0, 0.5),
+				Parent = track,
+			}), "Text")
+			build("round", knob, 3)
+
+			local valueLabel = build("caption", right, {
+				Text = tostring(value),
+				Font = Enum.Font.GothamBold,
+				TextSize = 11,
+				TextXAlignment = Enum.TextXAlignment.Right,
+				Size = UDim2.new(0, 36, 1, 0),
+				AnchorPoint = Vector2.new(1, 0),
+				Position = UDim2.new(1, -10, 0, 0),
+			}, "Accent")
+			local popScale = mk("UIScale", { Parent = valueLabel })
+			local popId = 0
+
+			local function pop()
+				popId += 1
+				local id = popId
+				popScale.Scale = 0.85
+				tween(popScale, { Scale = 1.1 }, 0.1)
+				task.delay(0.1, function()
+					if id == popId then tween(popScale, { Scale = 1 }, 0.1) end
+				end)
+			end
+
+			local function render()
+				local frac = (value - minV) / (maxV - minV)
+				fill.Size = UDim2.new(frac, 0, 1, 0)
+				knob.Position = UDim2.new(frac, 0, 0.5, 0)
+				local text = tostring(value)
+				if text ~= valueLabel.Text then
+					valueLabel.Text = text
+					pop()
+				end
+			end
+			render()
+
+			local function commit(v)
+				v = snap(v)
+				if v == value then return end
+				value = v
+				render()
+				setFlag(flag, value)
+				fire(cbs, value)
+			end
+
+			local function fromX(x)
+				local frac = math.clamp((x - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
+				commit(minV + frac * (maxV - minV))
+			end
+
+			local dragConn = bindDrag(trash, hit, {
+				start = function(pos)
+					page.ScrollingEnabled = false
+					fromX(pos.X)
+				end,
+				move = function(_, pos)
+					fromX(pos.X)
+				end,
+				finish = function()
+					page.ScrollingEnabled = true
+				end,
+			})
+
+			setFlag(flag, value)
+			task.defer(function()
+				fire(cbs, value)
+			end)
+
+			local slider = finish(row2)
+			function slider:Destroy()
+				dragConn:Disconnect()
+				row2:Destroy()
+			end
+			function slider:Callback(fn)
+				if type(fn) == "function" then table.insert(cbs, fn) end
+			end
+			function slider:Set(a, b)
+				if type(a) == "number" then
+					commit(a)
+				elseif type(a) == "string" then
+					labels.setTitle(a)
+					if type(b) == "string" then labels.setDesc(b) end
+				elseif type(a) == "function" then
+					table.clear(cbs)
+					cbs[1] = a
+				end
+			end
+			return slider
+		end
+
+		function tabObj:AddDropdown(dcfg)
+			local name = field(dcfg, 1, "Name", "Title") or "Dropdown"
+			local desc = field(dcfg, nil, "Description", "Desc")
+			local optionList = listOptions(field(dcfg, 2, "Options"))
+			local default = field(dcfg, 3, "Default")
+			local cbs = toCallbacks(field(dcfg, 4, "Callback"))
+			local flag = field(dcfg, 5, "Flag")
+			local multi = field(dcfg, nil, "MultiSelect") == true
+
+			local selected = {}
+			local optionUI = {}
+
+			local function ingest(source)
+				selected = {}
+				if type(source) == "string" or type(source) == "number" then
+					selected[tostring(source)] = true
+				elseif type(source) == "table" then
+					for k, v in pairs(source) do
+						if type(k) == "number" then
+							selected[tostring(v)] = true
+						elseif v then
+							selected[tostring(k)] = true
+						end
+					end
+				end
+			end
+
+			local function normalize()
+				local kept, any = {}, false
+				for _, n in ipairs(optionList) do
+					if selected[n] and (multi or not any) then
+						kept[n] = true
+						any = true
+					end
+				end
+				selected = kept
+			end
+
+			local function currentValue()
+				if multi then
+					local map = {}
+					for _, n in ipairs(optionList) do
+						map[n] = selected[n] == true
+					end
+					return map
+				end
+				for _, n in ipairs(optionList) do
+					if selected[n] then return n end
+				end
+				return nil
+			end
+
+			local function labelText()
+				local names = {}
+				for _, n in ipairs(optionList) do
+					if selected[n] then table.insert(names, n) end
+				end
+				return #names > 0 and table.concat(names, ", ") or "..."
+			end
+
+			ingest(hasFlag(flag) and lib.Flags[flag] or default)
+			normalize()
+
+			local row2, labels = build("row", page, name, desc, 178, true)
+			row2.LayoutOrder = nextOrder()
+
+			local pill = tag(mk("Frame", {
+				Size = UDim2.fromOffset(150, 18),
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, -10, 0.5, 0),
+				Parent = row2,
+			}), "Stroke")
+			build("round", pill, 4)
+			local pillLabel = build("caption", pill, {
+				Text = labelText(),
+				Font = Enum.Font.GothamBold,
+				TextSize = 10,
+				Position = UDim2.fromOffset(8, 0),
+				Size = UDim2.new(1, -26, 1, 0),
+				TextTruncate = Enum.TextTruncate.AtEnd,
+			}, "Text")
+			local arrow = tag(mk("ImageLabel", {
+				Size = UDim2.fromOffset(14, 14),
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, -5, 0.5, 0),
+				BackgroundTransparency = 1,
+				Image = lib:GetIcon("chevrondown"),
+				Parent = pill,
+			}), "TextMuted")
+
+			local catcher = mk("TextButton", {
+				Name = "AntiClick",
+				Size = UDim2.fromScale(1, 1),
+				BackgroundTransparency = 1,
+				Visible = false,
+				ZIndex = 50,
+				Parent = gui,
+			})
+			local panel = mk("Frame", {
+				Name = "DropdownFrame",
+				Size = UDim2.fromOffset(150, 0),
+				ClipsDescendants = true,
+				Active = true,
+				Parent = catcher,
+			})
+			tag(panel, "Elevated")
+			build("round", panel, 6)
+			build("outline", panel, "Stroke")
+			local scroll = mk("ScrollingFrame", {
+				Size = UDim2.fromScale(1, 1),
+				BackgroundTransparency = 1,
+				ScrollBarThickness = 2,
+				CanvasSize = UDim2.new(),
+				AutomaticCanvasSize = Enum.AutomaticSize.Y,
+				ScrollingDirection = Enum.ScrollingDirection.Y,
+				Parent = panel,
+			}, {
+				mk("UIPadding", {
+					PaddingLeft = UDim.new(0, 4),
+					PaddingRight = UDim.new(0, 4),
+					PaddingTop = UDim.new(0, 4),
+					PaddingBottom = UDim.new(0, 4),
+				}),
+				mk("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 2) }),
+			})
+			tag(scroll, "ScrollBar")
+
+			local function refreshMarks()
+				for n, ui in pairs(optionUI) do
+					local on = selected[n] == true
+					setKind(ui.label, on and "Text" or "TextMuted")
+					tween(ui.bar, {
+						Size = UDim2.fromOffset(3, on and 12 or 0),
+						BackgroundTransparency = on and 0 or 1,
+					})
+				end
+				pillLabel.Text = labelText()
+			end
+
+			local function syncFlag()
+				local v = currentValue()
+				setFlag(flag, multi and v or (v or ""))
+			end
+
+			local function pushValue()
+				syncFlag()
+				fire(cbs, currentValue())
+			end
+
+			local isOpen = false
+
+			local function panelHeight()
+				return math.clamp(#optionList, 1, 8) * 24 + 8
+			end
+
+			local function closePanel()
+				if not isOpen then return end
+				isOpen = false
+				catcher.Visible = false
+				tween(arrow, { Rotation = 0 })
+				setKind(arrow, "TextMuted")
+			end
+			table.insert(popups, closePanel)
+
+			local function openPanel()
+				if isOpen then return end
+				isOpen = true
+				local h = panelHeight()
+				local s = scaler.Scale
+				local pos, size = pill.AbsolutePosition / s, pill.AbsoluteSize / s
+				local screen = screenSize()
+				local below = pos.Y + size.Y + 4 + h <= screen.Y
+				panel.AnchorPoint = Vector2.new(0, below and 0 or 1)
+				panel.Position = UDim2.fromOffset(
+					math.clamp(pos.X, 0, math.max(0, screen.X - 150)),
+					below and (pos.Y + size.Y + 4) or (pos.Y - 4)
+				)
+				panel.Size = UDim2.fromOffset(150, 0)
+				catcher.Visible = true
+				tween(panel, { Size = UDim2.fromOffset(150, h) })
+				tween(arrow, { Rotation = 180 })
+				setKind(arrow, "Accent")
+			end
+
+			local function choose(n)
+				if multi then
+					selected[n] = (not selected[n]) or nil
+				else
+					selected = { [n] = true }
+				end
+				refreshMarks()
+				pushValue()
+				if not multi then closePanel() end
+			end
+
+			local function rebuildOptions()
+				for _, ui in pairs(optionUI) do
+					ui.btn:Destroy()
+				end
+				optionUI = {}
+				for i, n in ipairs(optionList) do
+					local btn = tag(mk("TextButton", {
+						Name = "Option",
+						Size = UDim2.new(1, 0, 0, 22),
+						BackgroundTransparency = 1,
+						LayoutOrder = i,
+						Parent = scroll,
+					}), "Frame")
+					build("round", btn, 4)
+					local bar = tag(mk("Frame", {
+						Size = UDim2.fromOffset(3, 0),
+						AnchorPoint = Vector2.new(0, 0.5),
+						Position = UDim2.new(0, 2, 0.5, 0),
+						BackgroundTransparency = 1,
+						Parent = btn,
+					}), "Accent")
+					build("round", bar, 2)
+					local lbl = build("caption", btn, {
+						Text = n,
+						Font = Enum.Font.GothamBold,
+						TextSize = 10,
+						Position = UDim2.fromOffset(10, 0),
+						Size = UDim2.new(1, -14, 1, 0),
+						TextTruncate = Enum.TextTruncate.AtEnd,
+					}, "TextMuted")
+					btn.MouseEnter:Connect(function()
+						tween(btn, { BackgroundTransparency = 0.4 })
+					end)
+					btn.MouseLeave:Connect(function()
+						tween(btn, { BackgroundTransparency = 1 })
+					end)
+					btn.Activated:Connect(function()
+						choose(n)
+					end)
+					optionUI[n] = { btn = btn, bar = bar, label = lbl }
+					Bus:FireConnection("OptionAdded", name, n)
+				end
+				normalize()
+				refreshMarks()
+			end
+
+			rebuildOptions()
+			syncFlag()
+			task.defer(function()
+				fire(cbs, currentValue())
+			end)
+
+			row2.Activated:Connect(function()
+				if isOpen then closePanel() else openPanel() end
+			end)
+			catcher.Activated:Connect(closePanel)
+
+			local dropdown = finish(row2)
+			function dropdown:Destroy()
+				closePanel()
+				catcher:Destroy()
+				row2:Destroy()
+			end
+			function dropdown:Callback(fn)
+				if type(fn) == "function" then table.insert(cbs, fn) end
+			end
+			function dropdown:Select(option)
+				local n = tostring(option)
+				if not table.find(optionList, n) then return end
+				if multi then selected[n] = true else selected = { [n] = true } end
+				refreshMarks()
+				pushValue()
+			end
+			-- table = new option list, string/number = select it, function = replace callback
+			function dropdown:Set(a)
+				if type(a) == "function" then
+					table.clear(cbs)
+					cbs[1] = a
+				elseif type(a) == "table" then
+					optionList = listOptions(a)
+					rebuildOptions()
+					pushValue()
+				elseif a ~= nil then
+					dropdown:Select(a)
+				end
+			end
+			function dropdown:Add(...)
+				local added = { ... }
+				if type(added[1]) == "table" then added = listOptions(added[1]) end
+				for _, option in ipairs(added) do
+					local n = tostring(option)
+					if not table.find(optionList, n) then table.insert(optionList, n) end
+				end
+				rebuildOptions()
+			end
+			function dropdown:Remove(option)
+				local n = tostring(option)
+				local idx = table.find(optionList, n)
+				if idx then
+					table.remove(optionList, idx)
+					selected[n] = nil
+					rebuildOptions()
+					pushValue()
+				end
+			end
+			return dropdown
+		end
+
+		function tabObj:AddTextBox(xcfg)
+			local name = field(xcfg, 1, "Name", "Title") or "Text Box"
+			local desc = field(xcfg, nil, "Description", "Desc")
+			local default = field(xcfg, 2, "Default")
+			local clear = field(xcfg, 3, "ClearText") == true
+			local cbs = toCallbacks(field(xcfg, 4, "Callback"))
+			local placeholder = tostring(field(xcfg, 5, "PlaceholderText", "Placeholder") or "Input")
+			local flag = field(xcfg, nil, "Flag")
+			local text = type(default) == "string" and default or ""
+			if hasFlag(flag) and type(lib.Flags[flag]) == "string" then text = lib.Flags[flag] end
+
+			local row2, labels = build("row", page, name, desc, 178, true)
+			row2.LayoutOrder = nextOrder()
+
+			local pill = tag(mk("Frame", {
+				Size = UDim2.fromOffset(150, 18),
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, -10, 0.5, 0),
+				Parent = row2,
+			}), "Stroke")
+			build("round", pill, 4)
+			local pencil = tag(mk("ImageLabel", {
+				Size = UDim2.fromOffset(12, 12),
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, -5, 0.5, 0),
+				BackgroundTransparency = 1,
+				Image = lib:GetIcon("pencil"),
+				Parent = pill,
+			}), "TextMuted")
+
+			local box = mk("TextBox", {
+				Size = UDim2.new(1, -26, 1, 0),
+				Position = UDim2.fromOffset(8, 0),
+				BackgroundTransparency = 1,
+				Font = Enum.Font.GothamBold,
+				TextSize = 10,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				ClearTextOnFocus = clear,
+				ClipsDescendants = true,
+				PlaceholderText = placeholder,
+				Text = text,
+				Parent = pill,
+			})
+			tag(box, "Text")
+			tag(box, "TextMuted", "PlaceholderColor3")
+
+			local function commit()
+				setFlag(flag, box.Text)
+				fire(cbs, box.Text)
+			end
+
+			box.Focused:Connect(function()
+				setKind(pencil, "Accent")
+			end)
+			box.FocusLost:Connect(function()
+				setKind(pencil, "TextMuted")
+				commit()
+			end)
+			row2.Activated:Connect(function()
+				box:CaptureFocus()
+			end)
+
+			setFlag(flag, box.Text)
+			if box.Text ~= "" then
+				task.defer(function()
+					fire(cbs, box.Text)
+				end)
+			end
+
+			local textbox = finish(row2)
+			function textbox:Callback(fn)
+				if type(fn) == "function" then table.insert(cbs, fn) end
+			end
+			function textbox:Set(a, b)
+				if type(a) == "function" then
+					table.clear(cbs)
+					cbs[1] = a
+				elseif a ~= nil then
+					box.Text = tostring(a)
+					commit()
+				end
+			end
+			return textbox
+		end
+
+		function tabObj:AddDiscordInvite(icfg)
+			local cardTitle = tostring(field(icfg, 1, "Title", "Name") or "Discord")
+			local cardDesc = tostring(field(icfg, nil, "Description", "Desc") or "")
+			local logo = field(icfg, 2, "Logo") or ""
+			local invite = tostring(field(icfg, 3, "Invite") or "")
+
+			local holder = mk("Frame", {
+				Name = "Option",
+				Size = UDim2.new(1, 0, 0, 92),
+				BackgroundTransparency = 1,
+				LayoutOrder = nextOrder(),
+				Parent = page,
+			})
+			build("caption", holder, {
+				Text = invite,
+				Font = Enum.Font.GothamBold,
+				TextSize = 10,
+				Position = UDim2.fromOffset(2, 0),
+				Size = UDim2.new(1, -2, 0, 14),
+			}, "Accent")
+
+			local card = tag(mk("Frame", {
+				Size = UDim2.new(1, 0, 0, 74),
+				AnchorPoint = Vector2.new(0, 1),
+				Position = UDim2.fromScale(0, 1),
+				Parent = holder,
+			}), "Frame")
+			build("round", card, 6)
+			build("outline", card, "Stroke")
+
+			local logoImage = mk("ImageLabel", {
+				Size = UDim2.fromOffset(32, 32),
+				Position = UDim2.fromOffset(8, 8),
+				BackgroundTransparency = 1,
+				Image = tostring(logo),
+				Parent = card,
+			})
+			build("round", logoImage, 4)
+
+			local titleL = build("caption", card, {
+				Text = cardTitle,
+				Font = Enum.Font.GothamBold,
+				TextSize = 11,
+				Position = UDim2.fromOffset(48, 8),
+				Size = UDim2.new(1, -56, 0, 14),
+			}, "Text")
+			local descL = build("caption", card, {
+				Text = cardDesc,
+				TextSize = 9,
+				Position = UDim2.fromOffset(48, 23),
+				Size = UDim2.new(1, -56, 0, 14),
+				TextTruncate = Enum.TextTruncate.AtEnd,
+			}, "TextMuted")
+
+			local join = mk("TextButton", {
+				Text = "Join",
+				Font = Enum.Font.GothamBold,
+				TextSize = 11,
+				TextColor3 = Color3.new(1, 1, 1),
+				Size = UDim2.new(1, -16, 0, 20),
+				AnchorPoint = Vector2.new(0.5, 1),
+				Position = UDim2.new(0.5, 0, 1, -8),
+				Parent = card,
+			})
+			tag(join, "Success")
+			build("round", join, 5)
+
+			local busy = false
+			join.Activated:Connect(function()
+				if busy then return end
+				busy = true
+				local copied = pcall(setclipboard, invite)
+				join.Text = copied and "Copied to Clipboard" or "Clipboard unavailable"
+				setKind(join, copied and "Accent" or "Danger")
+				task.delay(4, function()
+					join.Text = "Join"
+					setKind(join, "Success")
+					busy = false
+				end)
+			end)
+
+			local invitation = finish(holder)
+			function invitation:Set(a, b)
+				if type(a) == "string" then titleL.Text = a end
+				if type(b) == "string" then descL.Text = b end
+			end
+			return invitation
+		end
+
+		table.insert(tabs, record)
+		table.insert(lib.Tabs, { TabInfo = { Name = name, Icon = icon or false }, func = tabObj, Cont = page })
+		if #tabs == 1 then tabObj:Enable() end
+		return tabObj
+	end
+
+	return win
+end
+
+return lib
