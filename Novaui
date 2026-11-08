@@ -774,7 +774,6 @@ function lib:MakeWindow(cfg)
 	local shellStroke = build("outline", shell, "Stroke")
 	shellStroke.Thickness = 1.5
 
-	-- borde girando
 	local shellGrad = Instance.new("UIGradient")
 	shellGrad.Color = ColorSequence.new({
 		ColorSequenceKeypoint.new(0.00, rgb(88, 101, 242)),
@@ -1778,9 +1777,11 @@ function lib:MakeWindow(cfg)
 			local cbs = toCallbacks(field(dcfg, 4, "Callback"))
 			local flag = field(dcfg, 5, "Flag")
 			local multi = field(dcfg, nil, "MultiSelect") == true
+			local searchable = field(dcfg, nil, "Searchable") == true
 
 			local selected = {}
 			local optionUI = {}
+			local currentSearchText = ""
 
 			local function ingest(source)
 				selected = {}
@@ -1878,8 +1879,38 @@ function lib:MakeWindow(cfg)
 			tag(panel, "Elevated")
 			build("round", panel, 6)
 			build("outline", panel, "Stroke")
+
+			local searchBox = nil
+			if searchable then
+				local searchRow = mk("Frame", {
+					Size = UDim2.new(1, -8, 0, 24),
+					Position = UDim2.fromOffset(4, 4),
+					BackgroundTransparency = 1,
+					Parent = panel,
+				})
+				searchBox = mk("TextBox", {
+					Size = UDim2.fromScale(1, 1),
+					BackgroundColor3 = palette.elevated,
+					BorderSizePixel = 0,
+					Font = Enum.Font.GothamMedium,
+					TextSize = 10,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					PlaceholderText = "Buscar...",
+					PlaceholderColor3 = palette.muted,
+					TextColor3 = palette.text,
+					Text = "",
+					ClearTextOnFocus = false,
+					Parent = searchRow,
+				})
+				build("round", searchBox, 4)
+				tag(searchBox, "Frame", "BackgroundColor3")
+				tag(searchBox, "Text")
+				tag(searchBox, "TextMuted", "PlaceholderColor3")
+			end
+
 			local scroll = mk("ScrollingFrame", {
-				Size = UDim2.fromScale(1, 1),
+				Size = searchable and UDim2.new(1, 0, 1, -30) or UDim2.fromScale(1, 1),
+				Position = searchable and UDim2.fromOffset(0, 30) or UDim2.fromOffset(0, 0),
 				BackgroundTransparency = 1,
 				ScrollBarThickness = 2,
 				CanvasSize = UDim2.new(),
@@ -1922,7 +1953,9 @@ function lib:MakeWindow(cfg)
 			local isOpen = false
 
 			local function panelHeight()
-				return math.clamp(#optionList, 1, 8) * 24 + 8
+				local baseH = math.clamp(#optionList, 1, 8) * 24 + 8
+				if searchable then baseH += 30 end
+				return baseH
 			end
 
 			local function closePanel()
@@ -1931,6 +1964,10 @@ function lib:MakeWindow(cfg)
 				catcher.Visible = false
 				tween(arrow, { Rotation = 0 })
 				setKind(arrow, "TextMuted")
+				if searchBox then
+					currentSearchText = ""
+					searchBox.Text = ""
+				end
 			end
 			table.insert(popups, closePanel)
 
@@ -1952,6 +1989,10 @@ function lib:MakeWindow(cfg)
 				tween(panel, { Size = UDim2.fromOffset(150, h) })
 				tween(arrow, { Rotation = 180 })
 				setKind(arrow, "Accent")
+				if searchBox then
+					searchBox.Text = ""
+					currentSearchText = ""
+				end
 			end
 
 			local function choose(n)
@@ -1965,57 +2006,75 @@ function lib:MakeWindow(cfg)
 				if not multi then closePanel() end
 			end
 
-			local function rebuildOptions()
+			local function rebuildOptions(filterText)
 				for _, ui in pairs(optionUI) do
 					ui.btn:Destroy()
 				end
 				optionUI = {}
+				local count = 0
 				for i, n in ipairs(optionList) do
-					local btn = tag(mk("TextButton", {
-						Name = "Option",
-						Size = UDim2.new(1, 0, 0, 22),
-						BackgroundTransparency = 1,
-						LayoutOrder = i,
-						Parent = scroll,
-					}), "Frame")
-					build("round", btn, 4)
-					local bar = tag(mk("Frame", {
-						Size = UDim2.fromOffset(3, 0),
-						AnchorPoint = Vector2.new(0, 0.5),
-						Position = UDim2.new(0, 2, 0.5, 0),
-						BackgroundTransparency = 1,
-						Parent = btn,
-					}), "Accent")
-					build("round", bar, 2)
-					local lbl = build("caption", btn, {
-						Text = n,
-						Font = Enum.Font.GothamBold,
-						TextSize = 10,
-						Position = UDim2.fromOffset(10, 0),
-						Size = UDim2.new(1, -14, 1, 0),
-						TextTruncate = Enum.TextTruncate.AtEnd,
-					}, "TextMuted")
-					btn.MouseEnter:Connect(function()
-						tween(btn, { BackgroundTransparency = 0.4 })
-					end)
-					btn.MouseLeave:Connect(function()
-						tween(btn, { BackgroundTransparency = 1 })
-					end)
-					btn.Activated:Connect(function()
-						choose(n)
-					end)
-					optionUI[n] = { btn = btn, bar = bar, label = lbl }
-					Bus:FireConnection("OptionAdded", name, n)
+					local matches = filterText == "" or string.find(string.lower(n), string.lower(filterText), 1, true)
+					if matches then
+						count = count + 1
+						local btn = tag(mk("TextButton", {
+							Name = "Option",
+							Size = UDim2.new(1, 0, 0, 22),
+							BackgroundTransparency = 1,
+							LayoutOrder = i,
+							Parent = scroll,
+						}), "Frame")
+						build("round", btn, 4)
+						local bar = tag(mk("Frame", {
+							Size = UDim2.fromOffset(3, 0),
+							AnchorPoint = Vector2.new(0, 0.5),
+							Position = UDim2.new(0, 2, 0.5, 0),
+							BackgroundTransparency = 1,
+							Parent = btn,
+						}), "Accent")
+						build("round", bar, 2)
+						local lbl = build("caption", btn, {
+							Text = n,
+							Font = Enum.Font.GothamBold,
+							TextSize = 10,
+							Position = UDim2.fromOffset(10, 0),
+							Size = UDim2.new(1, -14, 1, 0),
+							TextTruncate = Enum.TextTruncate.AtEnd,
+						}, "TextMuted")
+						btn.MouseEnter:Connect(function()
+							tween(btn, { BackgroundTransparency = 0.4 })
+						end)
+						btn.MouseLeave:Connect(function()
+							tween(btn, { BackgroundTransparency = 1 })
+						end)
+						btn.Activated:Connect(function()
+							choose(n)
+						end)
+						optionUI[n] = { btn = btn, bar = bar, label = lbl }
+						Bus:FireConnection("OptionAdded", name, n)
+					end
 				end
 				normalize()
 				refreshMarks()
+
+				if isOpen then
+					local newH = math.clamp(count, 1, 8) * 24 + 8
+					if searchable then newH += 30 end
+					tween(panel, { Size = UDim2.fromOffset(150, newH) })
+				end
 			end
 
-			rebuildOptions()
+			rebuildOptions("")
 			syncFlag()
 			task.defer(function()
 				fire(cbs, currentValue())
 			end)
+
+			if searchBox then
+				searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+					currentSearchText = searchBox.Text
+					rebuildOptions(currentSearchText)
+				end)
+			end
 
 			row2.Activated:Connect(function()
 				if isOpen then closePanel() else openPanel() end
@@ -2044,7 +2103,7 @@ function lib:MakeWindow(cfg)
 					cbs[1] = a
 				elseif type(a) == "table" then
 					optionList = listOptions(a)
-					rebuildOptions()
+					rebuildOptions(currentSearchText)
 					pushValue()
 				elseif a ~= nil then
 					dropdown:Select(a)
@@ -2057,7 +2116,7 @@ function lib:MakeWindow(cfg)
 					local n = tostring(option)
 					if not table.find(optionList, n) then table.insert(optionList, n) end
 				end
-				rebuildOptions()
+				rebuildOptions(currentSearchText)
 			end
 			function dropdown:Remove(option)
 				local n = tostring(option)
@@ -2065,7 +2124,7 @@ function lib:MakeWindow(cfg)
 				if idx then
 					table.remove(optionList, idx)
 					selected[n] = nil
-					rebuildOptions()
+					rebuildOptions(currentSearchText)
 					pushValue()
 				end
 			end
