@@ -1,4 +1,4 @@
--- NovaUI v2.1.1 (FIXED) — Sliders compactos + Notify + Dropdown:Set(t,false)
+-- NovaUI v2.1.2 (FIXED + Notify integrado)
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
@@ -43,13 +43,8 @@ local function newSignal(name)
 		return handle
 	end
 
-	function sig:Connect(fn)
-		return add(fn, false)
-	end
-
-	function sig:Once(fn)
-		return add(fn, true)
-	end
+	function sig:Connect(fn) return add(fn, false) end
+	function sig:Once(fn) return add(fn, true) end
 
 	function sig:_fire(...)
 		for _, handle in ipairs(table.clone(handlers)) do
@@ -74,7 +69,7 @@ function Bus:FireConnection(name, ...)
 end
 
 local lib = {
-	Info = { Version = "2.1.1" },
+	Info = { Version = "2.1.2" },
 	Themes = {
 		Darker = {
 			gradient = sweep(rgb(8, 8, 10), rgb(12, 12, 14)),
@@ -86,6 +81,7 @@ local lib = {
 			muted = rgb(150, 150, 165),
 			success = rgb(67, 181, 129),
 			danger = rgb(237, 66, 69),
+			warning = rgb(255, 200, 100),
 		},
 		Dark = {
 			gradient = sweep(rgb(40, 40, 40), rgb(48, 48, 48)),
@@ -97,6 +93,7 @@ local lib = {
 			muted = rgb(190, 190, 190),
 			success = rgb(67, 181, 129),
 			danger = rgb(237, 66, 69),
+			warning = rgb(255, 200, 100),
 		},
 		Purple = {
 			gradient = sweep(rgb(27, 25, 30), rgb(33, 31, 38)),
@@ -108,6 +105,7 @@ local lib = {
 			muted = rgb(180, 175, 190),
 			success = rgb(67, 181, 129),
 			danger = rgb(237, 66, 69),
+			warning = rgb(255, 200, 100),
 		},
 		Abyss = {
 			gradient = sweep(rgb(8, 10, 16), rgb(11, 14, 22), rgb(14, 18, 28)),
@@ -119,6 +117,7 @@ local lib = {
 			muted = rgb(130, 150, 180),
 			success = rgb(0, 200, 140),
 			danger = rgb(220, 60, 80),
+			warning = rgb(255, 200, 100),
 		},
 	},
 	Save = { UISize = { 550, 380 }, TabSize = 160, Theme = "Darker" },
@@ -328,11 +327,12 @@ local KIND_KEY = {
 	Accent = "accent",
 	Success = "success",
 	Danger = "danger",
+	Warning = "warning",
 	ScrollBar = "accent",
 }
 
 local function colorOf(kind)
-	return palette[KIND_KEY[kind]]
+	return palette[KIND_KEY[kind]] or palette.accent
 end
 
 local function defaultProp(inst, kind)
@@ -661,98 +661,135 @@ end
 
 -- ===================== NOTIFY =====================
 local notifyGui
+
+local function ensureNotifyGui()
+	if notifyGui and notifyGui.Parent then return notifyGui end
+	notifyGui = CoreGui:FindFirstChild("NovaNotify")
+	if not notifyGui then
+		notifyGui = mk("ScreenGui", {
+			Name = "NovaNotify",
+			ResetOnSpawn = false,
+			IgnoreGuiInset = true,
+			ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+			DisplayOrder = 2000,
+			Parent = CoreGui,
+		})
+	end
+	return notifyGui
+end
+
+local function getNotifyHolder()
+	local gui = ensureNotifyGui()
+	local holder = gui:FindFirstChild("List")
+	if not holder then
+		holder = mk("Frame", {
+			Name = "List",
+			Size = UDim2.new(0, 300, 0, 0),
+			Position = UDim2.new(1, -320, 1, -20),
+			AnchorPoint = Vector2.new(0, 1),
+			BackgroundTransparency = 1,
+			Parent = gui,
+		}, {
+			mk("UIListLayout", {
+				SortOrder = Enum.SortOrder.LayoutOrder,
+				VerticalAlignment = Enum.VerticalAlignment.Bottom,
+				Padding = UDim.new(0, 8),
+			}),
+		})
+	end
+	return holder
+end
+
+local notifyOrder = 0
+
 function lib:Notify(cfg)
 	cfg = type(cfg) == "table" and cfg or {}
 	local title = tostring(cfg.Title or cfg[1] or "Nova")
 	local text = tostring(cfg.Text or cfg[2] or "")
 	local duration = tonumber(cfg.Duration or cfg[3]) or 4
-	local ok = cfg.Success == true
-	local warn = cfg.Warning == true
-	local danger = cfg.Danger == true
+	local isSuccess = cfg.Success == true
+	local isWarning = cfg.Warning == true
+	local isDanger = cfg.Danger == true
 
-	if not notifyGui or not notifyGui.Parent then
-		notifyGui = CoreGui:FindFirstChild("NovaNotify")
-		if not notifyGui then
-			notifyGui = mk("ScreenGui", {
-				Name = "NovaNotify",
-				ResetOnSpawn = false,
-				IgnoreGuiInset = true,
-				ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-				DisplayOrder = 2000,
-				Parent = CoreGui,
-			})
-		end
-	end
+	notifyOrder += 1
+	local order = notifyOrder
 
-	local holder = notifyGui:FindFirstChild("List")
-	if not holder then
-		holder = mk("Frame", {
-			Name = "List",
-			Size = UDim2.new(0, 280, 0, 0),
-			Position = UDim2.new(1, -300, 1, -20),
-			AnchorPoint = Vector2.new(0, 1),
-			BackgroundTransparency = 1,
-			Parent = notifyGui,
-		}, {
-			mk("UIListLayout", {
-				SortOrder = Enum.SortOrder.LayoutOrder,
-				VerticalAlignment = Enum.VerticalAlignment.Bottom,
-				Padding = UDim.new(0, 6),
-			}),
-		})
-	end
+	local holder = getNotifyHolder()
 
+	-- Card wrapper
 	local card = mk("Frame", {
 		Name = "Notify",
-		Size = UDim2.new(1, 0, 0, 58),
+		Size = UDim2.new(1, 0, 0, 64),
 		BackgroundTransparency = 1,
+		LayoutOrder = order,
 		Parent = holder,
 	})
-	local inner = tag(mk("Frame", {
+
+	local inner = mk("Frame", {
+		Name = "Inner",
 		Size = UDim2.fromScale(1, 1),
-		Position = UDim2.fromOffset(40, 0),
+		Position = UDim2.fromOffset(60, 0), -- empieza fuera para slide-in
+		BackgroundTransparency = 1,
 		Parent = card,
-	}), "Elevated")
-	build("round", inner, 6)
-	build("outline", inner, "Stroke")
-	local accentBar = tag(mk("Frame", {
+	})
+	tag(inner, "Elevated")
+	build("round", inner, 8)
+	local stroke = build("outline", inner, "Stroke", 1)
+	stroke.Transparency = 0
+
+	-- Barra de color lateral
+	local accentKind = isSuccess and "Success" or (isDanger and "Danger") or (isWarning and "Warning") or "Accent"
+	local bar = tag(mk("Frame", {
 		Size = UDim2.new(0, 3, 1, -16),
 		Position = UDim2.fromOffset(8, 8),
 		Parent = inner,
-	}), ok and "Success" or (danger and "Danger") or (warn and "Accent") or "Accent")
-	build("round", accentBar, 2)
+	}), accentKind)
+	build("round", bar, 2)
 
+	-- Icono opcional según tipo
+	local iconName = isSuccess and "checkcircle" or (isDanger and "alertcircle") or (isWarning and "alerttriangle") or "info"
+	tag(mk("ImageLabel", {
+		Size = UDim2.fromOffset(16, 16),
+		Position = UDim2.fromOffset(18, 10),
+		BackgroundTransparency = 1,
+		Image = lib:GetIcon(iconName),
+		Parent = inner,
+	}), accentKind)
+
+	-- Título
 	build("caption", inner, {
 		Text = title,
 		Font = Enum.Font.GothamBold,
 		TextSize = 12,
-		Position = UDim2.fromOffset(18, 8),
-		Size = UDim2.new(1, -24, 0, 16),
+		Position = UDim2.fromOffset(42, 8),
+		Size = UDim2.new(1, -52, 0, 16),
+		TextTruncate = Enum.TextTruncate.AtEnd,
 	}, "Text")
+
+	-- Descripción
 	build("caption", inner, {
 		Text = text,
 		TextSize = 10,
 		TextWrapped = true,
-		Position = UDim2.fromOffset(18, 24),
-		Size = UDim2.new(1, -24, 0, 30),
+		TextYAlignment = Enum.TextYAlignment.Top,
+		Position = UDim2.fromOffset(42, 26),
+		Size = UDim2.new(1, -52, 0, 32),
 	}, "TextMuted")
 
-	card.Position = UDim2.fromOffset(60, 0)
-	card.BackgroundTransparency = 1
-	inner.BackgroundTransparency = 1
-
-	tween(card, { Position = UDim2.fromOffset(0, 0) }, 0.25)
+	-- Slide-in animación
+	tween(inner, { Position = UDim2.fromOffset(0, 0) }, 0.25)
 	tween(inner, { BackgroundTransparency = 0 }, 0.25)
 
+	-- Slide-out + destroy
 	task.delay(duration, function()
-		if card.Parent then
-			tween(card, { Position = UDim2.fromOffset(60, 0) }, 0.25)
-			tween(inner, { BackgroundTransparency = 1 }, 0.25)
-			task.delay(0.3, function()
-				if card.Parent then card:Destroy() end
-			end)
-		end
+		if not card.Parent then return end
+		tween(inner, { Position = UDim2.fromOffset(60, 0) }, 0.25)
+		tween(inner, { BackgroundTransparency = 1 }, 0.25)
+		task.delay(0.3, function()
+			if card.Parent then card:Destroy() end
+		end)
 	end)
+
 	return card
 end
 
@@ -1727,9 +1764,7 @@ function lib:MakeWindow(cfg)
 			return toggle
 		end
 
-		-- =========================================================
-		-- SLIDER — COMPACTO (fix del "muy grande")
-		-- =========================================================
+		-- ===================== SLIDER COMPACTO =====================
 		function tabObj:AddSlider(scfg)
 			local name = field(scfg, 1, "Name", "Title") or "Slider!"
 			local desc = field(scfg, nil, "Description", "Desc")
@@ -1751,11 +1786,9 @@ function lib:MakeWindow(cfg)
 			end
 			value = snap(value)
 
-			-- 🔹 reserve=110 (antes 180/150) → slider NO queda gigante
 			local row2, labels = build("row", page, name, desc, 110, true)
 			row2.LayoutOrder = nextOrder()
 
-			-- 🔹 Contenedor derecho compacto: 90px de slider + 26px de valor
 			local right = mk("Frame", {
 				BackgroundTransparency = 1,
 				Size = UDim2.fromOffset(110, 20),
@@ -1766,7 +1799,7 @@ function lib:MakeWindow(cfg)
 
 			local hit = mk("TextButton", {
 				BackgroundTransparency = 1,
-				Size = UDim2.new(1, -30, 1, 0), -- 80px de barra, 30px de valor
+				Size = UDim2.new(1, -30, 1, 0),
 				Parent = right,
 			})
 
@@ -2203,7 +2236,6 @@ function lib:MakeWindow(cfg)
 				refreshMarks()
 				pushValue()
 			end
-			-- 🔥 Set(tabla, add): add=true → añade sin borrar
 			function dropdown:Set(a, add)
 				if type(a) == "function" then
 					table.clear(cbs)
@@ -2293,7 +2325,6 @@ function lib:MakeWindow(cfg)
 			tag(box, "Text")
 			tag(box, "TextMuted", "PlaceholderColor3")
 
-			-- 🔥 OnChanging: transforma el texto antes de commit
 			local textbox = finish(row2)
 			textbox.OnChanging = false
 
