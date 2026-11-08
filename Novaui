@@ -1649,21 +1649,24 @@ function lib:MakeWindow(cfg)
 			end
 			value = snap(value)
 
-			local row2, labels = build("row", page, name, desc, 140, true)
+			-- Ajustado a 180 para que el slider se vea compacto
+			local row2, labels = build("row", page, name, desc, 180, true)
 			row2.LayoutOrder = nextOrder()
 
 			local right = mk("Frame", {
 				BackgroundTransparency = 1,
-				Size = UDim2.new(0, 130, 1, 0),
+				Size = UDim2.new(0.45, 0, 1, 0), -- Ocupa el 45% de la fila
 				AnchorPoint = Vector2.new(1, 0),
-				Position = UDim2.new(1, 0, 0, 0),
+				Position = UDim2.new(1, -10, 0, 0),
 				Parent = row2,
 			})
+			
 			local hit = mk("TextButton", {
 				BackgroundTransparency = 1,
-				Size = UDim2.new(1, -40, 1, 0),
+				Size = UDim2.new(1, -24, 1, 0),
 				Parent = right,
 			})
+			
 			local track = tag(mk("Frame", {
 				Size = UDim2.new(1, 0, 0, 6),
 				AnchorPoint = Vector2.new(0, 0.5),
@@ -1686,9 +1689,9 @@ function lib:MakeWindow(cfg)
 				Font = Enum.Font.GothamBold,
 				TextSize = 11,
 				TextXAlignment = Enum.TextXAlignment.Right,
-				Size = UDim2.new(0, 30, 1, 0),
+				Size = UDim2.new(0, 20, 1, 0),
 				AnchorPoint = Vector2.new(1, 0),
-				Position = UDim2.new(1, -5, 0, 0),
+				Position = UDim2.new(1, 0, 0, 0),
 			}, "Accent")
 			local popScale = mk("UIScale", { Parent = valueLabel })
 			local popId = 0
