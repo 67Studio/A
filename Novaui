@@ -72,7 +72,7 @@ function Bus:FireConnection(name, ...)
 end
 
 local lib = {
-	Info = { Version = "2.0.0" },
+	Info = { Version = "2.1.0" },
 	Themes = {
 		Darker = {
 			gradient = sweep(rgb(25, 25, 25), rgb(32, 32, 32)),
@@ -693,6 +693,23 @@ function lib:GetIcon(name)
 	return lib.Icons[key] or lib.Icons.circle
 end
 
+local function resolveImage(img)
+	if type(img) == "string" and img:match("^https?://") then
+		local hash = 5381
+		for i = 1, #img do
+			hash = (hash * 33 + img:byte(i)) % 4294967296
+		end
+		local file = ("novaui_%x.png"):format(hash)
+		local ok, asset = pcall(function()
+			if not isfile(file) then writefile(file, game:HttpGet(img)) end
+			return (getcustomasset or getsynasset)(file)
+		end)
+		if ok and type(asset) == "string" then return asset end
+		return ""
+	end
+	return lib:GetIcon(img)
+end
+
 function lib:MakeWindow(cfg)
 	cfg = type(cfg) == "table" and cfg or {}
 	local title = tostring(field(cfg, 1, "Title", "Name") or "Nova UI")
@@ -713,6 +730,7 @@ function lib:MakeWindow(cfg)
 	local activeTab
 	local minimized, savedSize = false, nil
 	local dialogObj
+	local floatBtn
 
 	local gui = mk("ScreenGui", {
 		Name = GUI_NAME,
@@ -1161,7 +1179,11 @@ function lib:MakeWindow(cfg)
 	end
 
 	btnMin.Activated:Connect(function()
-		win:MinimizeBtn()
+		if floatBtn then
+			shell.Visible = false
+		else
+			win:MinimizeBtn()
+		end
 	end)
 	btnClose.Activated:Connect(function()
 		win:CloseBtn()
@@ -1169,26 +1191,68 @@ function lib:MakeWindow(cfg)
 
 	function win:AddMinimizeButton(mcfg)
 		mcfg = type(mcfg) == "table" and mcfg or {}
+		local btnProps = type(mcfg.Button) == "table" and table.clone(mcfg.Button) or {}
+		local image = mcfg.Image or mcfg.Icon or btnProps.Image
+		btnProps.Image = nil
+		local size = tonumber(mcfg.Size) or 44
+		local alwaysVisible = mcfg.AlwaysVisible == true
+
+		if floatBtn then floatBtn:Destroy() end
 		local btn = mk("ImageButton", {
 			Name = "MinimizeFloat",
-			Size = UDim2.fromOffset(36, 36),
-			Position = UDim2.fromOffset(20, 60),
+			Size = UDim2.fromOffset(size, size),
+			Position = typeof(mcfg.Position) == "UDim2" and mcfg.Position or UDim2.fromOffset(20, 60),
+			ScaleType = Enum.ScaleType.Crop,
+			Visible = alwaysVisible or not shell.Visible,
 			Parent = gui,
 		})
+		floatBtn = btn
 		tag(btn, "Frame", "BackgroundColor3")
-		tag(mk("ImageLabel", {
-			Size = UDim2.fromOffset(18, 18),
+		local floatScale = mk("UIScale", { Parent = btn })
+		local fallbackIcon = tag(mk("ImageLabel", {
+			Size = UDim2.fromOffset(math.floor(size / 2), math.floor(size / 2)),
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.fromScale(0.5, 0.5),
 			BackgroundTransparency = 1,
 			Image = lib:GetIcon("eye"),
 			Parent = btn,
 		}), "Accent")
-		local corner = build("round", btn, 8)
-		local stroke = build("outline", btn, "Stroke")
-		apply(btn, mcfg.Button)
+
+		local function setImage(value)
+			local resolved = value ~= nil and resolveImage(value) or ""
+			btn.Image = resolved
+			fallbackIcon.Visible = resolved == ""
+		end
+		setImage(image)
+
+		local corner = build("round", btn, mcfg.Circle == false and 10 or size)
+		local stroke = build("outline", btn, "Accent", 2)
+		apply(btn, btnProps)
 		apply(corner, mcfg.Corner)
 		apply(stroke, mcfg.Stroke)
+
+		btn.MouseEnter:Connect(function()
+			tween(floatScale, { Scale = 1.08 })
+		end)
+		btn.MouseLeave:Connect(function()
+			tween(floatScale, { Scale = 1 })
+		end)
+
+		local function syncFloat()
+			if alwaysVisible then
+				btn.Visible = true
+				return
+			end
+			local show = not shell.Visible
+			if show and not btn.Visible then
+				floatScale.Scale = 0.5
+				btn.Visible = true
+				tween(floatScale, { Scale = 1 })
+			else
+				btn.Visible = show
+			end
+		end
+		shell:GetPropertyChangedSignal("Visible"):Connect(syncFloat)
 
 		local origin, moved = nil, false
 		bindDrag(trash, btn, {
@@ -1201,8 +1265,8 @@ function lib:MakeWindow(cfg)
 				local s = scaler.Scale
 				local screen = screenSize()
 				btn.Position = UDim2.fromOffset(
-					math.clamp(origin.X + delta.X / s, 0, math.max(0, screen.X - 36)),
-					math.clamp(origin.Y + delta.Y / s, 0, math.max(0, screen.Y - 36))
+					math.clamp(origin.X + delta.X / s, 0, math.max(0, screen.X - size)),
+					math.clamp(origin.Y + delta.Y / s, 0, math.max(0, screen.Y - size))
 				)
 			end,
 		})
@@ -1214,7 +1278,7 @@ function lib:MakeWindow(cfg)
 			win:Minimize()
 		end)
 
-		return { Button = btn, Corner = corner, Stroke = stroke }
+		return { Button = btn, Corner = corner, Stroke = stroke, SetImage = setImage }
 	end
 
 	function win:SelectTab(which)
