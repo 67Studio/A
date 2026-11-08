@@ -1,4 +1,4 @@
--- NovaUI v2.1.2 (FIXED + Notify integrado)
+-- NovaUI v2.1.4 (FIXED + Notify + MinimizeBtn sin parpadeo)
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
@@ -69,7 +69,7 @@ function Bus:FireConnection(name, ...)
 end
 
 local lib = {
-	Info = { Version = "2.1.2" },
+	Info = { Version = "2.1.4" },
 	Themes = {
 		Darker = {
 			gradient = sweep(rgb(8, 8, 10), rgb(12, 12, 14)),
@@ -716,7 +716,6 @@ function lib:Notify(cfg)
 
 	local holder = getNotifyHolder()
 
-	-- Card wrapper
 	local card = mk("Frame", {
 		Name = "Notify",
 		Size = UDim2.new(1, 0, 0, 64),
@@ -728,7 +727,7 @@ function lib:Notify(cfg)
 	local inner = mk("Frame", {
 		Name = "Inner",
 		Size = UDim2.fromScale(1, 1),
-		Position = UDim2.fromOffset(60, 0), -- empieza fuera para slide-in
+		Position = UDim2.fromOffset(60, 0),
 		BackgroundTransparency = 1,
 		Parent = card,
 	})
@@ -737,7 +736,6 @@ function lib:Notify(cfg)
 	local stroke = build("outline", inner, "Stroke", 1)
 	stroke.Transparency = 0
 
-	-- Barra de color lateral
 	local accentKind = isSuccess and "Success" or (isDanger and "Danger") or (isWarning and "Warning") or "Accent"
 	local bar = tag(mk("Frame", {
 		Size = UDim2.new(0, 3, 1, -16),
@@ -746,7 +744,6 @@ function lib:Notify(cfg)
 	}), accentKind)
 	build("round", bar, 2)
 
-	-- Icono opcional según tipo
 	local iconName = isSuccess and "checkcircle" or (isDanger and "alertcircle") or (isWarning and "alerttriangle") or "info"
 	tag(mk("ImageLabel", {
 		Size = UDim2.fromOffset(16, 16),
@@ -756,7 +753,6 @@ function lib:Notify(cfg)
 		Parent = inner,
 	}), accentKind)
 
-	-- Título
 	build("caption", inner, {
 		Text = title,
 		Font = Enum.Font.GothamBold,
@@ -766,7 +762,6 @@ function lib:Notify(cfg)
 		TextTruncate = Enum.TextTruncate.AtEnd,
 	}, "Text")
 
-	-- Descripción
 	build("caption", inner, {
 		Text = text,
 		TextSize = 10,
@@ -776,11 +771,9 @@ function lib:Notify(cfg)
 		Size = UDim2.new(1, -52, 0, 32),
 	}, "TextMuted")
 
-	-- Slide-in animación
 	tween(inner, { Position = UDim2.fromOffset(0, 0) }, 0.25)
 	tween(inner, { BackgroundTransparency = 0 }, 0.25)
 
-	-- Slide-out + destroy
 	task.delay(duration, function()
 		if not card.Parent then return end
 		tween(inner, { Position = UDim2.fromOffset(60, 0) }, 0.25)
@@ -1161,6 +1154,7 @@ function lib:MakeWindow(cfg)
 		table.clear(lib.Tabs)
 		scalers[scaler] = nil
 		if lib._closeActive == destroyWindow then lib._closeActive = nil end
+		if floatBtn then floatBtn:Destroy() end
 		gui:Destroy()
 	end
 	lib._closeActive = destroyWindow
@@ -1196,6 +1190,80 @@ function lib:MakeWindow(cfg)
 			grip.Visible = false
 			tween(shell, { Size = UDim2.new(savedSize.X.Scale, savedSize.X.Offset, 0, HEADER_H) }, 0.25)
 		end
+	end
+
+	-- ===================== BOTÓN MINIMIZAR (FIX SIN PARPADEO) =====================
+	function win:AddMinimizeButton(mcfg)
+		mcfg = type(mcfg) == "table" and mcfg or {}
+		local btnProps = type(mcfg.Button) == "table" and table.clone(mcfg.Button) or {}
+		local image = mcfg.Image or mcfg.Icon or btnProps.Image
+		btnProps.Image = nil
+		local size = tonumber(mcfg.Size) or 44
+
+		if floatBtn then floatBtn:Destroy() end
+		local btn = mk("ImageButton", {
+			Name = "MinimizeFloat",
+			Size = UDim2.fromOffset(size, size),
+			Position = typeof(mcfg.Position) == "UDim2" and mcfg.Position or UDim2.fromOffset(20, 60),
+			ScaleType = Enum.ScaleType.Crop,
+			Visible = true,                       -- 🔒 SIEMPRE VISIBLE
+			Parent = gui,
+		})
+		floatBtn = btn
+		tag(btn, "Frame", "BackgroundColor3")
+		local floatScale = mk("UIScale", { Parent = btn })
+		local fallbackIcon = tag(mk("ImageLabel", {
+			Size = UDim2.fromOffset(math.floor(size / 2), math.floor(size / 2)),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			BackgroundTransparency = 1,
+			Image = lib:GetIcon("eye"),
+			Parent = btn,
+		}), "Accent")
+
+		local function setImage(value)
+			local resolved = value ~= nil and resolveImage(value) or ""
+			btn.Image = resolved
+			fallbackIcon.Visible = resolved == ""
+		end
+		setImage(image)
+
+		local corner = build("round", btn, mcfg.Circle == false and 10 or size)
+		local stroke = build("outline", btn, "Accent", 2)
+		apply(btn, btnProps)
+		apply(corner, mcfg.Corner)
+		apply(stroke, mcfg.Stroke)
+
+		-- ❌ SIN MouseEnter/Leave → sin tween de escala → sin parpadeo
+		-- ❌ SIN cambio de BackgroundColor3 → siempre igual
+
+		local origin, moved = nil, false
+		bindDrag(trash, btn, {
+			start = function()
+				origin = Vector2.new(btn.Position.X.Offset, btn.Position.Y.Offset)
+				moved = false
+			end,
+			move = function(delta)
+				if delta.Magnitude > 5 then moved = true end
+				local s = scaler.Scale
+				local screen = screenSize()
+				btn.Position = UDim2.fromOffset(
+					math.clamp(origin.X + delta.X / s, 0, math.max(0, screen.X - size)),
+					math.clamp(origin.Y + delta.Y / s, 0, math.max(0, screen.Y - size))
+				)
+			end,
+		})
+
+		btn.Activated:Connect(function()
+			if moved then
+				moved = false
+				return
+			end
+			-- 🎯 Toggle limpio: abre/cierra el hub
+			win:Minimize()
+		end)
+
+		return { Button = btn, Corner = corner, Stroke = stroke, SetImage = setImage }
 	end
 
 	function win:Dialog(dcfg)
@@ -1338,7 +1406,7 @@ function lib:MakeWindow(cfg)
 
 	btnMin.Activated:Connect(function()
 		if floatBtn then
-			shell.Visible = false
+			win:Minimize()
 		else
 			win:MinimizeBtn()
 		end
@@ -1346,98 +1414,6 @@ function lib:MakeWindow(cfg)
 	btnClose.Activated:Connect(function()
 		win:CloseBtn()
 	end)
-
-	function win:AddMinimizeButton(mcfg)
-		mcfg = type(mcfg) == "table" and mcfg or {}
-		local btnProps = type(mcfg.Button) == "table" and table.clone(mcfg.Button) or {}
-		local image = mcfg.Image or mcfg.Icon or btnProps.Image
-		btnProps.Image = nil
-		local size = tonumber(mcfg.Size) or 44
-		local alwaysVisible = mcfg.AlwaysVisible == true
-
-		if floatBtn then floatBtn:Destroy() end
-		local btn = mk("ImageButton", {
-			Name = "MinimizeFloat",
-			Size = UDim2.fromOffset(size, size),
-			Position = typeof(mcfg.Position) == "UDim2" and mcfg.Position or UDim2.fromOffset(20, 60),
-			ScaleType = Enum.ScaleType.Crop,
-			Visible = alwaysVisible or not shell.Visible,
-			Parent = gui,
-		})
-		floatBtn = btn
-		tag(btn, "Frame", "BackgroundColor3")
-		local floatScale = mk("UIScale", { Parent = btn })
-		local fallbackIcon = tag(mk("ImageLabel", {
-			Size = UDim2.fromOffset(math.floor(size / 2), math.floor(size / 2)),
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(0.5, 0.5),
-			BackgroundTransparency = 1,
-			Image = lib:GetIcon("eye"),
-			Parent = btn,
-		}), "Accent")
-
-		local function setImage(value)
-			local resolved = value ~= nil and resolveImage(value) or ""
-			btn.Image = resolved
-			fallbackIcon.Visible = resolved == ""
-		end
-		setImage(image)
-
-		local corner = build("round", btn, mcfg.Circle == false and 10 or size)
-		local stroke = build("outline", btn, "Accent", 2)
-		apply(btn, btnProps)
-		apply(corner, mcfg.Corner)
-		apply(stroke, mcfg.Stroke)
-
-		btn.MouseEnter:Connect(function()
-			tween(floatScale, { Scale = 1.08 })
-		end)
-		btn.MouseLeave:Connect(function()
-			tween(floatScale, { Scale = 1 })
-		end)
-
-		local function syncFloat()
-			if alwaysVisible then
-				btn.Visible = true
-				return
-			end
-			local show = not shell.Visible
-			if show and not btn.Visible then
-				floatScale.Scale = 0.5
-				btn.Visible = true
-				tween(floatScale, { Scale = 1 })
-			else
-				btn.Visible = show
-			end
-		end
-		shell:GetPropertyChangedSignal("Visible"):Connect(syncFloat)
-
-		local origin, moved = nil, false
-		bindDrag(trash, btn, {
-			start = function()
-				origin = Vector2.new(btn.Position.X.Offset, btn.Position.Y.Offset)
-				moved = false
-			end,
-			move = function(delta)
-				if delta.Magnitude > 5 then moved = true end
-				local s = scaler.Scale
-				local screen = screenSize()
-				btn.Position = UDim2.fromOffset(
-					math.clamp(origin.X + delta.X / s, 0, math.max(0, screen.X - size)),
-					math.clamp(origin.Y + delta.Y / s, 0, math.max(0, screen.Y - size))
-				)
-			end,
-		})
-		btn.Activated:Connect(function()
-			if moved then
-				moved = false
-				return
-			end
-			win:Minimize()
-		end)
-
-		return { Button = btn, Corner = corner, Stroke = stroke, SetImage = setImage }
-	end
 
 	function win:SelectTab(which)
 		if type(which) == "number" then
@@ -1764,7 +1740,6 @@ function lib:MakeWindow(cfg)
 			return toggle
 		end
 
-		-- ===================== SLIDER COMPACTO =====================
 		function tabObj:AddSlider(scfg)
 			local name = field(scfg, 1, "Name", "Title") or "Slider!"
 			local desc = field(scfg, nil, "Description", "Desc")
