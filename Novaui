@@ -1649,12 +1649,13 @@ function lib:MakeWindow(cfg)
 			end
 			value = snap(value)
 
-			local row2, labels = build("row", page, name, desc, 184, true)
+			-- CAMBIO AQUI: Aumentado de 184 a 224 para que la barra sea más corta
+			local row2, labels = build("row", page, name, desc, 224, true)
 			row2.LayoutOrder = nextOrder()
 
 			local right = mk("Frame", {
 				BackgroundTransparency = 1,
-				Size = UDim2.new(0, 170, 1, 0),
+				Size = UDim2.new(0, 200, 1, 0), -- Aumentado de 170 a 200
 				AnchorPoint = Vector2.new(1, 0),
 				Position = UDim2.new(1, 0, 0, 0),
 				Parent = row2,
