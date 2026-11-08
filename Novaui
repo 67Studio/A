@@ -1,3 +1,4 @@
+-- NovaUI v2.1.1 (FIXED) — Sliders compactos + Notify + Dropdown:Set(t,false)
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
@@ -73,7 +74,7 @@ function Bus:FireConnection(name, ...)
 end
 
 local lib = {
-	Info = { Version = "2.1.0" },
+	Info = { Version = "2.1.1" },
 	Themes = {
 		Darker = {
 			gradient = sweep(rgb(8, 8, 10), rgb(12, 12, 14)),
@@ -485,7 +486,7 @@ factory("row", function(page, title, desc, reserve, clickable)
 	local holder = mk("Frame", {
 		Name = "Labels",
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -reserve, 0, 26),
+		Size = UDim2.new(1, -(reserve or 20), 0, 26),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		Position = UDim2.fromOffset(10, 0),
 		Parent = row,
@@ -658,6 +659,104 @@ local function calcScale()
 	return viewport.Y / lib._virtualHeight
 end
 
+-- ===================== NOTIFY =====================
+local notifyGui
+function lib:Notify(cfg)
+	cfg = type(cfg) == "table" and cfg or {}
+	local title = tostring(cfg.Title or cfg[1] or "Nova")
+	local text = tostring(cfg.Text or cfg[2] or "")
+	local duration = tonumber(cfg.Duration or cfg[3]) or 4
+	local ok = cfg.Success == true
+	local warn = cfg.Warning == true
+	local danger = cfg.Danger == true
+
+	if not notifyGui or not notifyGui.Parent then
+		notifyGui = CoreGui:FindFirstChild("NovaNotify")
+		if not notifyGui then
+			notifyGui = mk("ScreenGui", {
+				Name = "NovaNotify",
+				ResetOnSpawn = false,
+				IgnoreGuiInset = true,
+				ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+				DisplayOrder = 2000,
+				Parent = CoreGui,
+			})
+		end
+	end
+
+	local holder = notifyGui:FindFirstChild("List")
+	if not holder then
+		holder = mk("Frame", {
+			Name = "List",
+			Size = UDim2.new(0, 280, 0, 0),
+			Position = UDim2.new(1, -300, 1, -20),
+			AnchorPoint = Vector2.new(0, 1),
+			BackgroundTransparency = 1,
+			Parent = notifyGui,
+		}, {
+			mk("UIListLayout", {
+				SortOrder = Enum.SortOrder.LayoutOrder,
+				VerticalAlignment = Enum.VerticalAlignment.Bottom,
+				Padding = UDim.new(0, 6),
+			}),
+		})
+	end
+
+	local card = mk("Frame", {
+		Name = "Notify",
+		Size = UDim2.new(1, 0, 0, 58),
+		BackgroundTransparency = 1,
+		Parent = holder,
+	})
+	local inner = tag(mk("Frame", {
+		Size = UDim2.fromScale(1, 1),
+		Position = UDim2.fromOffset(40, 0),
+		Parent = card,
+	}), "Elevated")
+	build("round", inner, 6)
+	build("outline", inner, "Stroke")
+	local accentBar = tag(mk("Frame", {
+		Size = UDim2.new(0, 3, 1, -16),
+		Position = UDim2.fromOffset(8, 8),
+		Parent = inner,
+	}), ok and "Success" or (danger and "Danger") or (warn and "Accent") or "Accent")
+	build("round", accentBar, 2)
+
+	build("caption", inner, {
+		Text = title,
+		Font = Enum.Font.GothamBold,
+		TextSize = 12,
+		Position = UDim2.fromOffset(18, 8),
+		Size = UDim2.new(1, -24, 0, 16),
+	}, "Text")
+	build("caption", inner, {
+		Text = text,
+		TextSize = 10,
+		TextWrapped = true,
+		Position = UDim2.fromOffset(18, 24),
+		Size = UDim2.new(1, -24, 0, 30),
+	}, "TextMuted")
+
+	card.Position = UDim2.fromOffset(60, 0)
+	card.BackgroundTransparency = 1
+	inner.BackgroundTransparency = 1
+
+	tween(card, { Position = UDim2.fromOffset(0, 0) }, 0.25)
+	tween(inner, { BackgroundTransparency = 0 }, 0.25)
+
+	task.delay(duration, function()
+		if card.Parent then
+			tween(card, { Position = UDim2.fromOffset(60, 0) }, 0.25)
+			tween(inner, { BackgroundTransparency = 1 }, 0.25)
+			task.delay(0.3, function()
+				if card.Parent then card:Destroy() end
+			end)
+		end
+	end)
+	return card
+end
+
+-- ===================== WINDOW =====================
 function lib:SetTheme(name)
 	local theme = lib.Themes[name]
 	if type(theme) ~= "table" then return false end
@@ -1628,6 +1727,9 @@ function lib:MakeWindow(cfg)
 			return toggle
 		end
 
+		-- =========================================================
+		-- SLIDER — COMPACTO (fix del "muy grande")
+		-- =========================================================
 		function tabObj:AddSlider(scfg)
 			local name = field(scfg, 1, "Name", "Title") or "Slider!"
 			local desc = field(scfg, nil, "Description", "Desc")
@@ -1649,26 +1751,27 @@ function lib:MakeWindow(cfg)
 			end
 			value = snap(value)
 
-			-- Ajustado a 180 para que el slider se vea compacto
-			local row2, labels = build("row", page, name, desc, 180, true)
+			-- 🔹 reserve=110 (antes 180/150) → slider NO queda gigante
+			local row2, labels = build("row", page, name, desc, 110, true)
 			row2.LayoutOrder = nextOrder()
 
+			-- 🔹 Contenedor derecho compacto: 90px de slider + 26px de valor
 			local right = mk("Frame", {
 				BackgroundTransparency = 1,
-				Size = UDim2.new(0.45, 0, 1, 0), -- Ocupa el 45% de la fila
-				AnchorPoint = Vector2.new(1, 0),
-				Position = UDim2.new(1, -10, 0, 0),
+				Size = UDim2.fromOffset(110, 20),
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, -10, 0.5, 0),
 				Parent = row2,
 			})
-			
+
 			local hit = mk("TextButton", {
 				BackgroundTransparency = 1,
-				Size = UDim2.new(1, -24, 1, 0),
+				Size = UDim2.new(1, -30, 1, 0), -- 80px de barra, 30px de valor
 				Parent = right,
 			})
-			
+
 			local track = tag(mk("Frame", {
-				Size = UDim2.new(1, 0, 0, 6),
+				Size = UDim2.new(1, 0, 0, 5),
 				AnchorPoint = Vector2.new(0, 0.5),
 				Position = UDim2.new(0, 0, 0.5, 0),
 				Parent = hit,
@@ -1677,7 +1780,7 @@ function lib:MakeWindow(cfg)
 			local fill = tag(mk("Frame", { Size = UDim2.fromScale(0, 1), Parent = track }), "Accent")
 			build("round", fill, 3)
 			local knob = tag(mk("Frame", {
-				Size = UDim2.fromOffset(8, 14),
+				Size = UDim2.fromOffset(7, 12),
 				AnchorPoint = Vector2.new(0.5, 0.5),
 				Position = UDim2.fromScale(0, 0.5),
 				Parent = track,
@@ -1687,9 +1790,9 @@ function lib:MakeWindow(cfg)
 			local valueLabel = build("caption", right, {
 				Text = tostring(value),
 				Font = Enum.Font.GothamBold,
-				TextSize = 11,
+				TextSize = 10,
 				TextXAlignment = Enum.TextXAlignment.Right,
-				Size = UDim2.new(0, 20, 1, 0),
+				Size = UDim2.new(0, 28, 1, 0),
 				AnchorPoint = Vector2.new(1, 0),
 				Position = UDim2.new(1, 0, 0, 0),
 			}, "Accent")
@@ -2100,13 +2203,23 @@ function lib:MakeWindow(cfg)
 				refreshMarks()
 				pushValue()
 			end
-			function dropdown:Set(a)
+			-- 🔥 Set(tabla, add): add=true → añade sin borrar
+			function dropdown:Set(a, add)
 				if type(a) == "function" then
 					table.clear(cbs)
 					cbs[1] = a
 				elseif type(a) == "table" then
-					optionList = listOptions(a)
+					local newList = listOptions(a)
+					if add then
+						for _, n in ipairs(newList) do
+							if not table.find(optionList, n) then table.insert(optionList, n) end
+						end
+					else
+						optionList = newList
+						selected = {}
+					end
 					rebuildOptions(currentSearchText)
+					normalize()
 					pushValue()
 				elseif a ~= nil then
 					dropdown:Select(a)
@@ -2180,9 +2293,18 @@ function lib:MakeWindow(cfg)
 			tag(box, "Text")
 			tag(box, "TextMuted", "PlaceholderColor3")
 
+			-- 🔥 OnChanging: transforma el texto antes de commit
+			local textbox = finish(row2)
+			textbox.OnChanging = false
+
 			local function commit()
-				setFlag(flag, box.Text)
-				fire(cbs, box.Text)
+				local v = box.Text
+				if textbox.OnChanging and type(textbox.OnChanging) == "function" then
+					v = textbox.OnChanging(v) or v
+					box.Text = v
+				end
+				setFlag(flag, v)
+				fire(cbs, v)
 			end
 
 			box.Focused:Connect(function()
@@ -2203,7 +2325,6 @@ function lib:MakeWindow(cfg)
 				end)
 			end
 
-			local textbox = finish(row2)
 			function textbox:Callback(fn)
 				if type(fn) == "function" then table.insert(cbs, fn) end
 			end
